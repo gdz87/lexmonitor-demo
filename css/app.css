@@ -97,3 +97,6 @@ label.row{flex-wrap:nowrap;align-items:flex-start;gap:.6rem}label.row input[type
 .md-table table{border-collapse:collapse;min-width:520px;width:100%;font-size:.88rem}.md-table th,.md-table td{border:1px solid rgba(127,127,127,.4);padding:.35rem .45rem;text-align:left;vertical-align:top}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:lmspin .8s linear infinite;vertical-align:-2px}@keyframes lmspin{to{transform:rotate(360deg)}}
 .update-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom));z-index:9999;background:#1f4fa3;color:#fff;padding:.5rem .8rem;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;gap:.6rem;align-items:center;font-weight:600;max-width:92vw}
+.ia-bigs{gap:.7rem}.ia-big{display:flex;flex-direction:column;align-items:flex-start;gap:.25rem;text-align:left;cursor:pointer;border:2px solid transparent;font:inherit;color:inherit;min-height:110px}
+.ia-big .ia-ic{font-size:1.8rem}.ia-big b{font-size:1.05rem}.ia-big.on{border-color:#1f4fa3;box-shadow:0 0 0 3px rgba(31,79,163,.15)}
+#ia-lib summary{cursor:pointer;padding:.2rem 0}

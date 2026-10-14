@@ -31,7 +31,7 @@ V.tablero=function(el){
    '<div class="card"><h2>Actuaciones registradas (6 meses)</h2>'+bars(months)+'</div></div>'+
   '<div class="grid g2" style="margin-top:1rem"><div class="card"><div class="row between"><h2>Alertas recientes</h2><a href="#/alertas" class="small">Ver todas</a></div><div class="list">'+
    S.alertas.slice().sort((a,b)=>a.fecha<b.fecha?1:-1).slice(0,4).map(a=>'<a class="item" href="#/proceso/'+a.procesoId+'"><div class="row between"><b>'+E(a.titulo)+'</b>'+(a.leida?'':'<span class="chip info">Nueva</span>')+'</div><div class="small muted">'+E((LM.proc(a.procesoId)||{}).medio||'')+' · '+a.fecha.replace('T',' ')+'</div></a>').join('')+'</div></div>'+
-   '<div class="card assist"><div class="row between"><h2>🧭 El asistente encontró '+hall.length+' puntos a revisar</h2><a href="#/asistente" class="small">Revisar</a></div><div class="list">'+hall.slice(0,4).map(h=>'<div class="small"><span class="chip '+(h.nivel==='alta'?'danger':h.nivel==='media'?'warn':'info')+'">'+h.nivel+'</span> '+E(h.titulo)+'</div>').join('')+'</div></div></div>';
+   '<div class="card assist"><div class="row between"><h2>🧭 El asistente encontró '+hall.length+' puntos a revisar</h2><a href="#/revision" class="small">Revisar</a></div><div class="list">'+hall.slice(0,4).map(h=>'<div class="small"><span class="chip '+(h.nivel==='alta'?'danger':h.nivel==='media'?'warn':'info')+'">'+h.nivel+'</span> '+E(h.titulo)+'</div>').join('')+'</div></div></div>';
   el.querySelector('#simNow').onclick=()=>{ LM.simulateSamai(true); };
 };
 function kpi(n,l,href,cls){ return '<a class="card kpi item" href="'+href+'"><div class="n" style="color:var(--'+(cls||'text')+')">'+n+'</div><div class="l">'+l+'</div></a>'; }
