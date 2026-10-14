@@ -23,13 +23,22 @@ function errMsg(st,body){ const m=(body&&body.error&&body.error.message)||''; co
   return t+'\n['+gmsg(st,body)+']'; }
 const isModelErr=(st,body)=>{ const m=(body&&body.error&&body.error.message)||''; if(/API_KEY_INVALID|API key not valid/i.test(JSON.stringify(body||{}))) return false;
   return st===404||(st===429&&/limit:\s*0\b/i.test(m))||((st===400||st===403)&&/model|not found|not supported|not available/i.test(m)); };
-async function call(url,opt){ if(navigator.onLine===false) throw new Error('Sin conexión a internet. Conéctese e intente de nuevo.');
-  let res; try{ res=await fetch(url,opt); }catch(e){ throw new Error('No se pudo conectar con Gemini (sin conexión o bloqueado por la red).'); }
-  let body=null; try{ body=await res.json(); }catch(e){}
+/* Trabajo en curso: señal de cancelación, plazo total y tiempo máximo por solicitud */
+let JOB=null; const cancelErr=()=>{ const e=new Error('Operación cancelada.'); e.cancel=true; return e; };
+async function call(url,opt,tmo){ if(navigator.onLine===false) throw new Error('Sin conexión a internet. Conéctese e intente de nuevo.');
+  const job=JOB; if(job&&job.signal&&job.signal.aborted) throw cancelErr();
+  tmo=tmo||(job?job.tmo:15000); if(job) tmo=Math.max(1000,Math.min(tmo,job.deadline-Date.now()));
+  const ac=new AbortController(); let why=''; const t=setTimeout(()=>{ why='timeout'; ac.abort(); },tmo);
+  const onC=()=>{ why='cancel'; ac.abort(); }; job&&job.signal&&job.signal.addEventListener('abort',onC);
+  let res, body=null;
+  try{ try{ res=await fetch(url,Object.assign({},opt,{signal:ac.signal})); }
+    catch(e){ if(why==='cancel') throw cancelErr(); if(why==='timeout'){ const er=new Error('Google no respondió en '+Math.round(tmo/1000)+' s.'); er.timeout=true; throw er; } throw new Error('No se pudo conectar con Gemini (sin conexión o bloqueado por la red).'); }
+    try{ body=await res.json(); }catch(e){ if(why==='cancel') throw cancelErr(); if(why==='timeout'){ const er=new Error('Google no terminó de responder en '+Math.round(tmo/1000)+' s.'); er.timeout=true; throw er; } }
+  } finally{ clearTimeout(t); job&&job.signal&&job.signal.removeEventListener('abort',onC); }
   if(!res.ok){ const er=new Error(errMsg(res.status,body)); er.status=res.status; er.body=body; er.model=isModelErr(res.status,body); er.rate=res.status===429&&!er.model; er.transient=[500,502,503,504].includes(res.status)||/overload|high demand|UNAVAILABLE|try again later/i.test(JSON.stringify(body||{})); throw er; } return body; }
 /* Lista real de modelos de la clave que admiten generateContent, ordenados por preferencia */
 LM.gemList=async function(key){ let out=[], tok='';
-  for(let n=0;n<5;n++){ const b=await call(API.replace(/\/$/,'')+'?pageSize=1000&key='+encodeURIComponent(key)+(tok?'&pageToken='+encodeURIComponent(tok):'')); (b.models||[]).forEach(m=>out.push(m)); tok=b.nextPageToken; if(!tok) break; }
+  for(let n=0;n<5;n++){ const b=await call(API.replace(/\/$/,'')+'?pageSize=1000&key='+encodeURIComponent(key)+(tok?'&pageToken='+encodeURIComponent(tok):''),undefined,15000); (b.models||[]).forEach(m=>out.push(m)); tok=b.nextPageToken; if(!tok) break; }
   const ok=out.filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent')).map(m=>({id:String(m.name).replace(/^models\//,''),n:m.displayName||m.name})).filter(m=>/gemini/i.test(m.id)&&!BAD.test(m.id));
   const rank=id=>{ const i=PREF.indexOf(id); if(i>=0) return i; return 100+(/flash/.test(id)?0:50)+(/preview|exp/.test(id)?20:0)+(/lite/.test(id)?5:0)-((parseFloat((id.match(/gemini-(\d+(?:\.\d+)?)/)||[])[1])||0)); };
   return ok.sort((a,b)=>rank(a.id)-rank(b.id)); };
@@ -42,29 +51,32 @@ function quotaInfo(body){ const e=(body&&body.error)||{}; const det=e.details||[
   let wait=null; const ri=det.find(d=>/RetryInfo/.test(d['@type']||'')); if(ri&&ri.retryDelay) wait=parseFloat(ri.retryDelay);
   if(wait==null){ const m=(e.message||'').match(/retry in ([\d.]+)\s*s/i); if(m) wait=parseFloat(m[1]); }
   return {daily:/PerDay|per day|daily/i.test(txt),wait}; }
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const sleep=ms=>new Promise((ok,ko)=>{ const job=JOB; if(job&&job.signal&&job.signal.aborted) return ko(cancelErr()); const t=setTimeout(()=>{ job&&job.signal&&job.signal.removeEventListener('abort',c); ok(); },ms); const c=()=>{ clearTimeout(t); ko(cancelErr()); }; job&&job.signal&&job.signal.addEventListener('abort',c); });
+const left=()=>JOB?JOB.deadline-Date.now():1e9;
 LM.gemOnStatus=null; const status=t=>{ try{ LM.gemOnStatus&&LM.gemOnStatus(t); }catch(e){} };
 /* Reintentos con espera (2 s, 5 s) ante saturación; si persiste o el modelo no está disponible, pasa al siguiente modelo de la lista y lo guarda */
 async function withFallback(key,prompt,opt){ opt=opt||{}; let list=null; const getList=async()=>list=list||await LM.gemList(key);
   let model=LM.gemModel(); if(model==='auto'||(opt.verify&&!(await getList()).some(m=>m.id===model))){ const L=await getList(); if(!L.length) throw new Error('Su clave no tiene ningún modelo Gemini de texto disponible.'); model=L[0].id; setModel(model); }
   const tried=[]; let lastErr=null, sat=0;
-  for(let hop=0;hop<5;hop++){ tried.push(model);
-    for(let a=0;a<3;a++){
+  for(let hop=0;hop<5;hop++){ if(left()<3000) break; tried.push(model);
+    for(let a=0;a<3;a++){ if(left()<3000) break;
       try{ status(a||hop?'Probando con '+model+'…':'Trabajando con Gemini ('+model+')…'); const b=await gen1(key,model,prompt,opt.gc); okModel(model); return {b,model,list}; }
-      catch(e){ lastErr=e;
-        if(e.rate){ const q=quotaInfo(e.body); if(!q.daily&&q.wait!=null&&q.wait<=30&&!e.waited){ e.waited=true; for(let k=Math.ceil(q.wait)+1;k>0;k--){ status('Límite por minuto de Google, reintentando en '+k+' s… ('+model+')'); await sleep(1000); } try{ status('Reintentando con '+model+'…'); const b=await gen1(key,model,prompt,opt.gc); okModel(model); return {b,model,list}; }catch(e2){ lastErr=e2; } }
+      catch(e){ lastErr=e; if(e.cancel) throw e; if(e.timeout){ e.message+=' ('+model+')'; break; }
+        if(e.rate){ const q=quotaInfo(e.body); if(!q.daily&&q.wait!=null&&q.wait<=30&&q.wait*1000+5000<left()&&!e.waited){ e.waited=true; for(let k=Math.ceil(q.wait)+1;k>0;k--){ status('Límite por minuto de Google, reintentando en '+k+' s… ('+model+')'); await sleep(1000); } try{ status('Reintentando con '+model+'…'); const b=await gen1(key,model,prompt,opt.gc); okModel(model); return {b,model,list}; }catch(e2){ lastErr=e2; } }
           lastErr.switchQ=q.daily?'Cuota diaria agotada':'Límite por minuto de Google'; break; }
-        if(e.transient&&a<2){ const w=a?5000:2000; status('Google está saturado, reintentando en '+w/1000+' s… ('+model+')'); await sleep(w); continue; } break; } }
-    if(!(lastErr.transient||lastErr.model||lastErr.rate)) throw lastErr; if(lastErr.transient) sat++;
+        if(e.transient&&a<2){ const w=a?5000:2000; if(w+5000>left()) break; status('Google está saturado, reintentando en '+w/1000+' s… ('+model+')'); await sleep(w); continue; } break; } }
+    if(!lastErr) break; if(!(lastErr.transient||lastErr.model||lastErr.rate||lastErr.timeout)) throw lastErr; if(lastErr.transient) sat++;
     let L; try{ L=await getList(); }catch(x){ throw lastErr; } const next=L.find(m=>!tried.includes(m.id)); if(!next) break;
-    status((lastErr.switchQ||(lastErr.transient?'Google sigue saturado':'Modelo no disponible'))+' con '+model+'; cambiando a '+next.id+'…'); LM.toast('Cambiando a '+next.id+'…'); model=next.id; }
+    status((lastErr.switchQ||(lastErr.timeout?model+' no respondió a tiempo':lastErr.transient?'Google sigue saturado':'Modelo no disponible'))+' con '+model+'; cambiando a '+next.id+'…'); LM.toast('Cambiando a '+next.id+'…'); model=next.id; }
+  if(!lastErr||left()<3000&&!lastErr.rate) throw new Error('Se agotó el tiempo máximo de espera (2 min) sin respuesta de Google. Modelos probados: '+(tried.join(', ')||'ninguno')+'. Intente de nuevo en unos minutos.'+(lastErr?'\nÚltimo error: '+lastErr.message:''));
+  if(lastErr.timeout&&!lastErr.body) throw new Error('Ningún modelo respondió a tiempo ('+tried.join(', ')+'). Google puede estar lento; intente de nuevo en unos minutos.');
   const lit=(lastErr.message.match(/\[Google:[^\]]*\]/)||[''])[0];
   throw new Error((lastErr.rate?'Se alcanzaron los límites gratuitos de Google en los modelos probados ('+tried.join(', ')+'). Espere un minuto (o hasta mañana si es la cuota diaria).':sat?'Google está saturado en este momento: fallaron todos los modelos probados ('+tried.join(', ')+'). Espere unos minutos e intente de nuevo.':'Ningún modelo disponible respondió ('+tried.join(', ')+').')+'\n'+lit); }
-LM.gemTest=async function(key){ const ok=recentOk(), cur=LM.gemModel();
+LM.gemTest=async function(key,signal){ JOB={signal,deadline:Date.now()+(window.LM_TEST_DEADLINE||60000),tmo:window.LM_TEST_TMO||15000}; try{ const ok=recentOk(), cur=LM.gemModel();
   if(ok&&(cur==='auto'||cur===ok)){ const list=await LM.gemList(key); if(list.some(m=>m.id===ok)){ setModel(ok); return {model:ok,list,cached:true}; } }
-  const r=await withFallback(key,'Responde solo: OK',{verify:true,gc:{maxOutputTokens:20}}); const list=r.list||await LM.gemList(key); return {model:r.model,list}; };
-LM.gemRun=async function(prompt){ const key=LM.gemKey(); if(prompt.length>MAXC) throw new Error('El texto es demasiado largo ('+Math.round(prompt.length/1000)+' mil caracteres; máximo '+MAXC/1000+' mil). Reduzca los documentos o divídalos.');
-  const {b}=await withFallback(key,prompt);
+  const r=await withFallback(key,'Responde solo: OK',{verify:true,gc:{maxOutputTokens:20}}); const list=r.list||await LM.gemList(key); return {model:r.model,list}; }finally{ JOB=null; } };
+LM.gemRun=async function(prompt,signal){ const key=LM.gemKey(); if(prompt.length>MAXC) throw new Error('El texto es demasiado largo ('+Math.round(prompt.length/1000)+' mil caracteres; máximo '+MAXC/1000+' mil). Reduzca los documentos o divídalos.');
+  JOB={signal,deadline:Date.now()+(window.LM_TEST_DEADLINE||120000),tmo:window.LM_TEST_TMO||45000}; let b; try{ b=(await withFallback(key,prompt)).b; }finally{ JOB=null; }
   const c=b&&b.candidates&&b.candidates[0]; const t=c&&c.content&&(c.content.parts||[]).map(p=>p.thought?'':(p.text||'')).join('');
   if(!t){ const why=(b&&b.promptFeedback&&b.promptFeedback.blockReason)||(c&&c.finishReason)||'sin texto'; throw new Error('Gemini no devolvió resultado ('+why+'). Ajuste el texto e intente de nuevo.'); }
   return t+(c.finishReason==='MAX_TOKENS'?'\n\n> ⚠ Respuesta cortada por longitud máxima.':''); };
@@ -146,9 +158,11 @@ LM.iaAttach=function(el,getKey,getPid,getPrompt,getTitle){ const box=document.cr
       p.notas=(p.notas?p.notas+'\n\n':'')+'--- IA: '+title+' ('+new Date().toLocaleString('es-CO')+')'+(sim?' [SIMULACIÓN]':'')+' — revisar ---\n'+cur(); LM.save(); LM.toast('Guardado en Notas del proceso ✓'); }; };
   async function exec(prompt,simText,title,btn){ const st=box.querySelector('#ia-st');
     if(!LM.gemKey()){ st.textContent='Simulación (sin clave)'; return show(simText,true,title); }
-    btn.disabled=true; st.innerHTML='<span class="spin" aria-hidden="true"></span> Trabajando con Gemini… puede tardar hasta un minuto'; LM.gemOnStatus=t=>st.innerHTML='<span class="spin" aria-hidden="true"></span> '+E(t);
-    try{ const t=await LM.gemRun(prompt); st.textContent='✓ Listo'; show(t,false,title); }
-    catch(e){ st.textContent=''; box.querySelector('#ia-res').innerHTML='<div class="card" style="border-color:#c0392b;margin-top:1rem"><b>❌ No se pudo completar.</b><p class="small">'+E(e.message)+'</p></div>'; }
+    btn.disabled=true; const ac=new AbortController(), t0=Date.now(); let cur='Iniciando…';
+    const paint=()=>{ st.innerHTML='<span class="spin" aria-hidden="true"></span> '+E(cur)+' <span class="muted">· '+Math.round((Date.now()-t0)/1000)+' s</span> <button class="btn sm danger" id="ia-cancel" type="button">✕ Cancelar</button>'; st.querySelector('#ia-cancel').onclick=()=>{ cur='Cancelando…'; ac.abort(); }; };
+    LM.gemOnStatus=t=>{ cur=t; paint(); }; paint(); const tick=setInterval(paint,1000);
+    try{ const t=await LM.gemRun(prompt,ac.signal); clearInterval(tick); st.textContent='✓ Listo ('+Math.round((Date.now()-t0)/1000)+' s)'; show(t,false,title); }
+    catch(e){ clearInterval(tick); st.textContent=e.cancel?'Cancelado.':''; if(!e.cancel) box.querySelector('#ia-res').innerHTML='<div class="card" style="border-color:#c0392b;margin-top:1rem"><b>❌ No se pudo completar.</b><p class="small">'+E(e.message).replace(/\n/g,'<br>')+'</p></div>'; }
     finally{ btn.disabled=false; LM.gemOnStatus=null; } }
   function run(){ const key=getKey(), two=key==='comparar'; const A=docs.A.trim(), B=docs.B.trim();
     if(!A||(two&&!B)) return LM.toast(two?'Cargue los dos documentos (A y B)':'Cargue o pegue al menos un documento');
@@ -171,8 +185,8 @@ const origC=V.config; V.config=function(el,args){ origC(el,args); const k=LM.gem
   $('#cf-gm').onchange=e=>{ $('#cf-gmo').classList.toggle('hide',e.target.value!=='__otro'); if(e.target.value!=='__otro') saveK(); };
   $('#cf-gkv').onclick=()=>{ const i=$('#cf-gk'); i.type=i.type==='password'?'text':'password'; };
   $('#cf-gs').onclick=()=>{ const v=saveK(); msg(v?'<span class="chip ok">Clave guardada</span>':'<span class="chip">Sin clave</span>'); LM.toast(v?'Clave guardada en este navegador ✓':'Sin clave: modo simulación'); };
-  $('#cf-gt').onclick=async()=>{ const v=saveK(); if(!v) return msg('<span class="chip warn">Pegue primero una clave</span>'); msg('<span class="spin"></span> Probando…'); LM.gemOnStatus=t=>msg('<span class="spin"></span> '+E(t));
-    try{ const r=await LM.gemTest(v); fill(r.list,r.model); msg('<span class="chip ok">✓ Conexión correcta</span> Modelo en uso: <b>'+E(r.model)+'</b> ('+r.list.length+' modelos disponibles'+(r.cached?'; funcionó en las últimas horas, no se gastó cuota':'')+')'); }catch(e){ msg('<span class="chip warn">Error</span> '+E(e.message).replace(/\n/g,'<br>')); } LM.gemOnStatus=null; };
+  $('#cf-gt').onclick=async()=>{ const v=saveK(); if(!v) return msg('<span class="chip warn">Pegue primero una clave</span>'); const ac=new AbortController(); const cbtn=' <button class="btn sm danger" id="cf-gc" type="button">✕ Cancelar</button>'; LM.gemOnStatus=t=>{ msg('<span class="spin"></span> '+E(t)+cbtn); $('#cf-gc').onclick=()=>ac.abort(); }; LM.gemOnStatus('Probando…');
+    try{ const r=await LM.gemTest(v,ac.signal); fill(r.list,r.model); msg('<span class="chip ok">✓ Conexión correcta</span> Modelo en uso: <b>'+E(r.model)+'</b> ('+r.list.length+' modelos disponibles'+(r.cached?'; funcionó en las últimas horas, no se gastó cuota':'')+')'); }catch(e){ msg(e.cancel?'<span class="chip">Prueba cancelada</span>':'<span class="chip warn">Error</span> '+E(e.message).replace(/\n/g,'<br>')); } LM.gemOnStatus=null; };
   $('#cf-gd').onclick=()=>{ if(!confirm('¿Borrar la clave de API de este navegador?')) return; try{ localStorage.removeItem(KK); }catch(e){} $('#cf-gk').value=''; msg('<span class="chip">Clave borrada: modo simulación</span>'); LM.toast('Clave borrada'); };
 };
 })();
