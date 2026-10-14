@@ -1,0 +1,5 @@
+LexMonitor – maqueta funcional (DATOS FICTICIOS)
+Abrir: doble clic en index.html (funciona sin internet) o LexMonitor_demo.html (un solo archivo, ideal para celular).
+Instalar como app: servir la carpeta por HTTPS (p. ej. GitHub Pages/Netlify) y usar "Agregar a pantalla de inicio".
+Datos: se guardan en el navegador. Configuración > Exportar/Importar JSON o Restaurar demo.
+Simulado: monitoreo SAMAI, envíos WhatsApp/correo. Real: calculadora de términos, radicado, agenda, asistente, borradores, informes.

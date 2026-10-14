@@ -1,0 +1,139 @@
+/* Módulos: Tablero, Procesos, Ficha del proceso, Clientes */
+(function(){
+const LM=window.LM, V=LM.views, E=LM.esc;
+const COLORS=['#2f6fe0','#7a4bd8','#1b9e77','#e08a1f','#d1495b','#3fa7d6','#8c8c8c'];
+LM.estadoChip=p=>'<span class="chip '+(p.estado==='Activo'?'ok':p.estado==='Terminado'?'':'warn')+'">'+E(p.estado)+'</span>';
+function donut(data){ const tot=data.reduce((s,d)=>s+d.v,0)||1; let a=-Math.PI/2; const R=60,r=36,cx=75,cy=75;
+  const segs=data.map((d,i)=>{ const ang=d.v/tot*Math.PI*2; const x1=cx+R*Math.cos(a),y1=cy+R*Math.sin(a); a+=ang; const x2=cx+R*Math.cos(a),y2=cy+R*Math.sin(a);
+    const xi2=cx+r*Math.cos(a),yi2=cy+r*Math.sin(a),xi1=cx+r*Math.cos(a-ang),yi1=cy+r*Math.sin(a-ang); const lg=ang>Math.PI?1:0;
+    if(d.v===tot) return '<circle cx="75" cy="75" r="48" fill="none" stroke="'+COLORS[i]+'" stroke-width="24"/>';
+    return '<path d="M'+x1+' '+y1+' A'+R+' '+R+' 0 '+lg+' 1 '+x2+' '+y2+' L'+xi2+' '+yi2+' A'+r+' '+r+' 0 '+lg+' 0 '+xi1+' '+yi1+'Z" fill="'+COLORS[i%7]+'"><title>'+E(d.k)+': '+d.v+'</title></path>'; }).join('');
+  return '<div class="row" style="align-items:center;gap:1rem;flex-wrap:nowrap"><svg viewBox="0 0 150 150" width="140" height="140" role="img" aria-label="Procesos por medio de control">'+segs+'<text x="75" y="80" text-anchor="middle" font-size="22" font-weight="800">'+tot+'</text></svg><div class="small">'+
+   data.map((d,i)=>'<div class="row" style="gap:.4rem;flex-wrap:nowrap"><span style="width:10px;height:10px;border-radius:3px;background:'+COLORS[i%7]+';flex:none"></span>'+E(d.k)+' <b>'+d.v+'</b></div>').join('')+'</div></div>'; }
+function bars(data){ const max=Math.max(1,...data.map(d=>d.v)); const w=300,h=140,bw=w/data.length;
+  return '<svg viewBox="0 0 '+w+' '+(h+24)+'" width="100%" role="img" aria-label="Actuaciones por mes">'+data.map((d,i)=>{ const bh=d.v/max*(h-20); return '<rect x="'+(i*bw+8)+'" y="'+(h-bh)+'" width="'+(bw-16)+'" height="'+bh+'" rx="5" fill="#2f6fe0"><title>'+d.k+': '+d.v+'</title></rect><text x="'+(i*bw+bw/2)+'" y="'+(h-bh-4)+'" text-anchor="middle" font-size="11" font-weight="700">'+d.v+'</text><text x="'+(i*bw+bw/2)+'" y="'+(h+16)+'" text-anchor="middle" font-size="11">'+d.k+'</text>'; }).join('')+'</svg>'; }
+LM.donut=donut; LM.bars=bars;
+
+V.tablero=function(el){
+  const S=LM.state, hoy=LM.iso(LM.today()), sem=LM.iso(LM.addDays(LM.today(),7));
+  const act=S.procesos.filter(p=>p.estado!=='Terminado'); const ev=LM.allEvents();
+  const vHoy=ev.filter(e=>e.tipo==='vencimiento'&&e.fecha===hoy), vSem=ev.filter(e=>e.fecha>=hoy&&e.fecha<=sem);
+  const nuevas=S.alertas.filter(a=>!a.leida); const hall=LM.runAssistant?LM.runAssistant():[];
+  const byMedio={}; S.procesos.forEach(p=>byMedio[p.medio]=(byMedio[p.medio]||0)+1);
+  const months=[]; for(let i=5;i>=0;i--){ const d=new Date(LM.today().getFullYear(),LM.today().getMonth()-i,1); const k=LM.iso(d).slice(0,7); months.push({k:LM.MES[d.getMonth()].slice(0,3),key:k,v:0}); }
+  S.procesos.forEach(p=>p.actuaciones.forEach(a=>{ const m=months.find(x=>x.key===a.fecha.slice(0,7)); if(m) m.v++; }));
+  el.innerHTML='<div class="row between"><div><h1>'+(new Date().getHours()<12?'Buenos días':new Date().getHours()<19?'Buenas tardes':'Buenas noches')+' 👋</h1><p class="muted small">'+LM.fmtLong(hoy)+' · '+E(S.config.firma)+'</p></div><div class="row no-print"><a class="btn primary" href="#/procesos/nuevo">＋ Nuevo proceso</a><button class="btn" id="simNow">⟳ Consultar SAMAI (simulado)</button></div></div>'+
+  '<div class="grid g4" style="margin-top:.5rem">'+
+   kpi(act.length,'Procesos activos','#/procesos')+kpi(vHoy.length,'Términos que vencen hoy','#/agenda',vHoy.length?'danger':'')+kpi(vSem.length,'Eventos próximos 7 días','#/agenda',vSem.length?'warn':'')+kpi(nuevas.length,'Alertas nuevas','#/alertas',nuevas.length?'info':'')+'</div>'+
+  '<div class="grid g3" style="margin-top:1rem">'+
+   '<div class="card"><h2>Próximos vencimientos y audiencias</h2><div class="list">'+(vSem.concat(ev.filter(e=>e.fecha>sem)).slice(0,6).map(e=>{ const d=LM.diffDays(hoy,e.fecha); return '<a class="item" href="#/proceso/'+e.proceso.id+'"><div class="row between"><b>'+E(e.titulo)+'</b><span class="chip '+(e.tipo==='audiencia'?'info':d<=2?'danger':'warn')+'">'+(d===0?'Hoy':d<0?'Vencido':'En '+d+' d')+'</span></div><div class="small muted">'+LM.fmt(e.fecha)+(e.hora?' · '+e.hora:'')+' · '+E(e.proceso.medio)+'</div></a>'; }).join('')||'<p class="muted">Sin eventos.</p>')+'</div></div>'+
+   '<div class="card"><h2>Procesos por medio de control</h2>'+donut(Object.entries(byMedio).map(([k,v])=>({k,v})))+'</div>'+
+   '<div class="card"><h2>Actuaciones registradas (6 meses)</h2>'+bars(months)+'</div></div>'+
+  '<div class="grid g2" style="margin-top:1rem"><div class="card"><div class="row between"><h2>Alertas recientes</h2><a href="#/alertas" class="small">Ver todas</a></div><div class="list">'+
+   S.alertas.slice().sort((a,b)=>a.fecha<b.fecha?1:-1).slice(0,4).map(a=>'<a class="item" href="#/proceso/'+a.procesoId+'"><div class="row between"><b>'+E(a.titulo)+'</b>'+(a.leida?'':'<span class="chip info">Nueva</span>')+'</div><div class="small muted">'+E((LM.proc(a.procesoId)||{}).medio||'')+' · '+a.fecha.replace('T',' ')+'</div></a>').join('')+'</div></div>'+
+   '<div class="card assist"><div class="row between"><h2>🧭 El asistente encontró '+hall.length+' puntos a revisar</h2><a href="#/asistente" class="small">Revisar</a></div><div class="list">'+hall.slice(0,4).map(h=>'<div class="small"><span class="chip '+(h.nivel==='alta'?'danger':h.nivel==='media'?'warn':'info')+'">'+h.nivel+'</span> '+E(h.titulo)+'</div>').join('')+'</div></div></div>';
+  el.querySelector('#simNow').onclick=()=>{ LM.simulateSamai(true); };
+};
+function kpi(n,l,href,cls){ return '<a class="card kpi item" href="'+href+'"><div class="n" style="color:var(--'+(cls||'text')+')">'+n+'</div><div class="l">'+l+'</div></a>'; }
+
+V.procesos=function(el,args){
+  if(args[0]==='nuevo') return LM.procesoForm(null);
+  const S=LM.state; const medios=[...new Set(S.procesos.map(p=>p.medio))];
+  el.innerHTML='<div class="row between"><h1>Procesos</h1><a class="btn primary" href="#/procesos/nuevo">＋ Nuevo proceso</a></div>'+
+   '<div class="card" style="margin:.6rem 0"><div class="grid g4"><div><label for="q">Buscar</label><input id="q" placeholder="Radicado, parte, despacho…"></div><div><label for="fm">Medio de control</label><select id="fm"><option value="">Todos</option>'+medios.map(m=>'<option>'+E(m)+'</option>').join('')+'</select></div>'+
+   '<div><label for="fe">Estado</label><select id="fe"><option value="">Todos</option><option>Activo</option><option>Pre-demanda</option><option>Terminado</option></select></div><div><label for="fc">Cliente</label><select id="fc"><option value="">Todos</option>'+S.clientes.map(c=>'<option value="'+c.id+'">'+E(c.nombre)+'</option>').join('')+'</select></div></div></div><p class="small muted" id="cnt"></p><div class="list" id="plist"></div>';
+  const draw=()=>{ const q=el.querySelector('#q').value.toLowerCase().replace(/-/g,''), fm=el.querySelector('#fm').value, fe=el.querySelector('#fe').value, fc=el.querySelector('#fc').value;
+    const r=S.procesos.filter(p=>(!fm||p.medio===fm)&&(!fe||p.estado===fe)&&(!fc||p.clienteId===fc)&&(!q||(p.radicado+' '+p.demandante+' '+p.demandado+' '+p.despacho+' '+p.medio).toLowerCase().replace(/-/g,'').includes(q)));
+    el.querySelector('#cnt').textContent=r.length+' de '+S.procesos.length+' procesos';
+    el.querySelector('#plist').innerHTML=r.map(p=>{ const last=p.actuaciones.slice().sort((a,b)=>a.fecha<b.fecha?1:-1)[0]; return '<a class="item" href="#/proceso/'+p.id+'"><div class="row between"><span class="mono">'+LM.fmtRad(p.radicado)+'</span>'+LM.estadoChip(p)+'</div><b>'+E(p.medio)+'</b> · '+E(p.demandante)+' <span class="muted">vs.</span> '+E(p.demandado)+'<div class="small muted">'+E(p.despacho)+' · Etapa: '+E(p.etapa)+(last?' · Última actuación: '+LM.fmt(last.fecha):'')+'</div></a>'; }).join('')||'<p class="muted">Sin resultados.</p>'; };
+  el.querySelectorAll('input,select').forEach(i=>i.addEventListener('input',draw)); draw();
+};
+
+LM.radPartsHtml=function(r){ if(!r.parts) return ''; const L=r.labels,P=r.parts; const f=(k,t)=>'<div><span class="muted">'+t+'</span><b>'+(k==='municipio'?P.municipio.slice(2):P[k])+'</b>'+E(L[k])+'</div>';
+  return '<div class="rad-parts">'+f('depto','Departamento')+f('municipio','Municipio')+f('entidad','Entidad')+f('especialidad','Especialidad')+f('despacho','Despacho')+f('anio','Año')+f('consecutivo','Consecutivo')+f('instancia','Instancia')+'</div>'; };
+
+LM.procesoForm=function(p){
+  const S=LM.state, isNew=!p; p=p||{radicado:'',medio:'Nulidad y restablecimiento del derecho',despacho:'',ponente:'',clienteId:S.clientes[0].id,demandante:'',demandado:'',estado:'Activo',etapa:'Radicación',cuantia:0,fechaHecho:'',resumen:''};
+  const medios=['Nulidad y restablecimiento del derecho','Nulidad simple','Reparación directa','Controversias contractuales','Nulidad electoral','Acción de tutela','Acción popular','Repetición','Ejecutivo'];
+  LM.modal('<h2>'+(isNew?'Nuevo proceso':'Editar proceso')+'</h2><form id="pf" novalidate>'+
+   '<label for="f-rad">Radicado (23 dígitos)</label><input id="f-rad" inputmode="numeric" autocomplete="off" value="'+E(p.radicado)+'" placeholder="15001-23-33-000-2026-00001-00"><div id="radMsg" class="small" aria-live="polite"></div><div id="radParts" style="margin-top:.4rem"></div>'+
+   '<div class="grid g2"><div><label for="f-medio">Medio de control</label><select id="f-medio">'+medios.map(m=>'<option'+(m===p.medio?' selected':'')+'>'+m+'</option>').join('')+'</select></div>'+
+   '<div><label for="f-cli">Cliente</label><select id="f-cli">'+S.clientes.map(c=>'<option value="'+c.id+'"'+(c.id===p.clienteId?' selected':'')+'>'+E(c.nombre)+'</option>').join('')+'</select></div>'+
+   '<div><label for="f-dte">Demandante</label><input id="f-dte" value="'+E(p.demandante)+'" required></div><div><label for="f-ddo">Demandado</label><input id="f-ddo" value="'+E(p.demandado)+'" required></div>'+
+   '<div><label for="f-desp">Despacho</label><input id="f-desp" value="'+E(p.despacho)+'" placeholder="Se sugiere a partir del radicado"></div><div><label for="f-pon">Ponente / juez</label><input id="f-pon" value="'+E(p.ponente)+'"></div>'+
+   '<div><label for="f-est">Estado</label><select id="f-est">'+['Activo','Pre-demanda','Suspendido','Terminado'].map(x=>'<option'+(x===p.estado?' selected':'')+'>'+x+'</option>').join('')+'</select></div><div><label for="f-eta">Etapa</label><input id="f-eta" value="'+E(p.etapa)+'"></div>'+
+   '<div><label for="f-cua">Cuantía (COP)</label><input id="f-cua" type="number" min="0" value="'+(p.cuantia||0)+'"></div><div><label for="f-hecho">Fecha del hecho / acto (para caducidad)</label><input id="f-hecho" type="date" value="'+E(p.fechaHecho)+'"></div></div>'+
+   '<label for="f-res">Resumen</label><textarea id="f-res">'+E(p.resumen)+'</textarea><p id="fErr" class="err"></p>'+
+   '<div class="row" style="justify-content:flex-end;margin-top:.8rem"><button type="button" class="btn" data-close>Cancelar</button><button class="btn primary" id="f-save">Guardar proceso</button></div></form>',
+  (m,close)=>{
+    const rad=m.querySelector('#f-rad'); const check=()=>{ const r=LM.parseRadicado(rad.value); const msg=m.querySelector('#radMsg');
+      if(!rad.value){ msg.innerHTML=''; m.querySelector('#radParts').innerHTML=''; return r; }
+      msg.innerHTML=r.ok?'<span class="okt">✓ Radicado válido: '+r.formatted+'</span>':'<span class="err">'+r.errors.map(E).join('<br>')+'</span>';
+      m.querySelector('#radParts').innerHTML=LM.radPartsHtml(r);
+      const desp=m.querySelector('#f-desp'); if(r.parts&&!desp.value) desp.value=(r.labels.entidad+' – '+r.labels.depto+' ('+r.labels.municipio+') · '+r.labels.despacho); return r; };
+    rad.addEventListener('input',check); check();
+    m.querySelector('#pf').onsubmit=e=>{ e.preventDefault(); const r=check(); const err=m.querySelector('#fErr');
+      if(!r.ok){ err.textContent='Corrija el radicado antes de guardar.'; rad.focus(); return; }
+      if(S.procesos.some(x=>x.radicado===r.clean&&x!==p)){ err.textContent='Ya existe un proceso con ese radicado.'; return; }
+      const dte=m.querySelector('#f-dte').value.trim(), ddo=m.querySelector('#f-ddo').value.trim(); if(!dte||!ddo){ err.textContent='Demandante y demandado son obligatorios.'; return; }
+      Object.assign(p,{radicado:r.clean,medio:m.querySelector('#f-medio').value,clienteId:m.querySelector('#f-cli').value,demandante:dte,demandado:ddo,despacho:m.querySelector('#f-desp').value,ponente:m.querySelector('#f-pon').value,estado:m.querySelector('#f-est').value,etapa:m.querySelector('#f-eta').value,cuantia:+m.querySelector('#f-cua').value||0,fechaHecho:m.querySelector('#f-hecho').value,resumen:m.querySelector('#f-res').value});
+      if(isNew){ p.id='p'+LM.uid(); p.actuaciones=[{id:LM.uid(),fecha:LM.iso(LM.today()),tipo:'radicacion',titulo:'Proceso registrado en '+S.config.appName,detalle:'Alta manual.',fuente:'Usuario'}]; p.eventos=[]; p.documentos=[]; p.notas=''; S.procesos.unshift(p); }
+      LM.save(); close(); LM.toast(isNew?'Proceso creado ✓':'Cambios guardados ✓'); location.hash='#/proceso/'+p.id; LM.route(); };
+  });
+  if(isNew&&location.hash.indexOf('nuevo')>=0){ history.replaceState(null,'','#/procesos'); LM.views.procesos(LM.$('#view'),[]); }
+};
+
+const TIPOS={radicacion:'Radicación',providencia:'Providencia',notificacion:'Notificación',audiencia:'Audiencia',memorial:'Memorial',otro:'Otro'};
+V.proceso=function(el,args){
+  const p=LM.proc(args[0]); if(!p){ el.innerHTML='<div class="card">Proceso no encontrado. <a href="#/procesos">Volver</a></div>'; return; }
+  const tab=args[1]||'linea'; const r=LM.parseRadicado(p.radicado); const c=LM.cli(p.clienteId);
+  el.innerHTML='<a href="#/procesos" class="small no-print">← Procesos</a><div class="row between" style="margin-top:.3rem"><div><div class="mono">'+LM.fmtRad(p.radicado)+' <span class="chip warn">ficticio</span></div><h1 style="margin-top:.3rem">'+E(p.medio)+'</h1><div class="muted small">'+E(p.despacho)+' · '+E(p.ponente)+'</div></div><div class="row no-print">'+LM.estadoChip(p)+'<button class="btn sm" id="edit">✎ Editar</button><a class="btn sm" href="#/reportes/'+p.id+'">📄 Informe</a><a class="btn sm" href="#/borradores/'+p.id+'">📝 Borrador</a></div></div>'+
+   '<div class="grid g3" style="margin:.8rem 0"><div class="card small"><b>Demandante</b><br>'+E(p.demandante)+'</div><div class="card small"><b>Demandado</b><br>'+E(p.demandado)+'</div><div class="card small"><b>Cliente</b><br><a href="#/clientes/'+c.id+'">'+E(c.nombre)+'</a><br><span class="muted">Etapa: '+E(p.etapa)+(p.cuantia?' · Cuantía '+LM.money(p.cuantia):'')+'</span></div></div>'+
+   '<div class="tabs" role="tablist">'+[['linea','Línea de tiempo'],['agenda','Términos y agenda'],['docs','Documentos'],['radicado','Radicado'],['notas','Notas']].map(([k,t])=>'<button role="tab" data-tab="'+k+'" class="'+(k===tab?'active':'')+'">'+t+'</button>').join('')+'</div><div id="tabc"></div>';
+  el.querySelector('#edit').onclick=()=>LM.procesoForm(p);
+  el.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{ history.replaceState(null,'','#/proceso/'+p.id+'/'+b.dataset.tab); V.proceso(el,[p.id,b.dataset.tab]); });
+  const tc=el.querySelector('#tabc');
+  if(tab==='linea'){
+    const acts=p.actuaciones.slice().sort((a,b)=>a.fecha<b.fecha?1:-1);
+    tc.innerHTML='<div class="row between"><div class="tl-filter" id="tlf"><button class="btn sm" data-f="">Todas</button>'+Object.entries(TIPOS).map(([k,t])=>'<button class="btn sm" data-f="'+k+'">'+t+'</button>').join('')+'</div><button class="btn sm primary" id="addAct">＋ Actuación</button></div>'+
+     '<div class="card" style="margin-top:.8rem"><div class="small muted">Vista cronológica (deslice →; toque un punto)</div><div class="htl">'+acts.slice().reverse().map(a=>'<div class="h" data-go="'+a.id+'" title="'+E(a.titulo)+'"><i style="background:'+({audiencia:'#7a4bd8',providencia:'#1b7f4b',notificacion:'#a35d00'}[a.tipo]||'#2f6fe0')+'"></i>'+LM.fmt(a.fecha)+'<br><b>'+E(a.titulo.slice(0,28))+'</b></div>').join('')+'</div></div>'+
+     '<div class="timeline" id="tl">'+acts.map(a=>'<div class="tl-item k-'+a.tipo+'" id="act-'+a.id+'" data-tipo="'+a.tipo+'" tabindex="0"><span class="tl-dot"></span><div class="tl-body"><div class="row between"><b>'+E(a.titulo)+'</b><span class="chip">'+TIPOS[a.tipo]+'</span></div><div class="small muted">'+LM.fmtLong(a.fecha)+' · '+E(a.fuente||'')+'</div><div class="tl-detail small">'+(E(a.detalle)||'<i class="muted">Sin detalle</i>')+'<div class="row" style="margin-top:.4rem"><button class="btn sm" data-term="'+a.fecha+'">⏱ Calcular término desde aquí</button><button class="btn sm danger" data-del="'+a.id+'">Eliminar</button></div></div></div></div>').join('')+'</div>';
+    tc.querySelectorAll('.tl-item').forEach(i=>{ const t=()=>i.classList.toggle('open'); i.addEventListener('click',e=>{ if(!e.target.closest('button')) t(); }); i.addEventListener('keydown',e=>{ if(e.key==='Enter') t(); }); });
+    tc.querySelectorAll('[data-go]').forEach(h=>h.onclick=()=>{ const t=tc.querySelector('#act-'+h.dataset.go); t.classList.add('open'); t.scrollIntoView({behavior:'smooth',block:'center'}); });
+    tc.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>tc.querySelectorAll('.tl-item').forEach(i=>i.classList.toggle('hide',!!b.dataset.f&&i.dataset.tipo!==b.dataset.f)));
+    tc.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ if(!confirm('¿Eliminar esta actuación?')) return; p.actuaciones=p.actuaciones.filter(a=>a.id!==b.dataset.del); LM.save(); LM.toast('Actuación eliminada'); V.proceso(el,[p.id,'linea']); });
+    tc.querySelectorAll('[data-term]').forEach(b=>b.onclick=()=>{ location.hash='#/terminos/'+p.id+'/'+b.dataset.term; });
+    tc.querySelector('#addAct').onclick=()=>LM.modal('<h2>Nueva actuación</h2><form id="af"><label for="a-f">Fecha</label><input type="date" id="a-f" value="'+LM.iso(LM.today())+'" required><label for="a-t">Tipo</label><select id="a-t">'+Object.entries(TIPOS).map(([k,t])=>'<option value="'+k+'">'+t+'</option>').join('')+'</select><label for="a-ti">Título</label><input id="a-ti" required><label for="a-d">Detalle</label><textarea id="a-d"></textarea><div class="row" style="justify-content:flex-end;margin-top:.8rem"><button type="button" class="btn" data-close>Cancelar</button><button class="btn primary">Guardar</button></div></form>',(m,close)=>{
+      m.querySelector('#af').onsubmit=e=>{ e.preventDefault(); const ti=m.querySelector('#a-ti').value.trim(); if(!ti){ LM.toast('Escriba un título'); return; } p.actuaciones.push({id:LM.uid(),fecha:m.querySelector('#a-f').value,tipo:m.querySelector('#a-t').value,titulo:ti,detalle:m.querySelector('#a-d').value,fuente:'Usuario'}); LM.save(); close(); LM.toast('Actuación agregada ✓'); V.proceso(el,[p.id,'linea']); }; });
+  }
+  if(tab==='agenda'){
+    const evs=(p.eventos||[]).slice().sort((a,b)=>a.fecha<b.fecha?-1:1); const hoy=LM.iso(LM.today());
+    tc.innerHTML='<div class="row between"><h2>Términos y eventos</h2><div class="row"><a class="btn sm" href="#/terminos/'+p.id+'">⏱ Calcular término</a><button class="btn sm primary" id="addEv">＋ Evento</button></div></div><div class="list">'+(evs.map(e=>{ const d=LM.diffDays(hoy,e.fecha); return '<div class="item"><div class="row between"><b>'+E(e.titulo)+'</b><span class="chip '+(e.tipo==='audiencia'?'info':d<0?'':d<=2?'danger':'warn')+'">'+(d<0?'Pasado':d===0?'Hoy':'En '+d+' días')+'</span></div><div class="small muted">'+LM.fmtLong(e.fecha)+(e.hora?' · '+e.hora:'')+(e.norma?' · '+E(e.norma):'')+'</div>'+(e.tipo==='audiencia'?'<label class="row small" style="font-weight:500"><input type="checkbox" data-prep="'+e.id+'"'+(e.preparada?' checked':'')+'> Audiencia preparada</label>':'')+'<button class="btn sm danger" data-dev="'+e.id+'">Quitar</button></div>'; }).join('')||'<p class="muted">Sin eventos. Use la calculadora para agregar vencimientos.</p>')+'</div>';
+    tc.querySelectorAll('[data-prep]').forEach(c=>c.onchange=()=>{ p.eventos.find(e=>e.id===c.dataset.prep).preparada=c.checked; LM.save(); LM.toast(c.checked?'Marcada como preparada':'Marcada como pendiente'); });
+    tc.querySelectorAll('[data-dev]').forEach(b=>b.onclick=()=>{ p.eventos=p.eventos.filter(e=>e.id!==b.dataset.dev); LM.save(); LM.toast('Evento quitado'); V.proceso(el,[p.id,'agenda']); });
+    tc.querySelector('#addEv').onclick=()=>LM.eventForm(p,()=>V.proceso(el,[p.id,'agenda']));
+  }
+  if(tab==='docs'){
+    tc.innerHTML='<div class="card"><h2>Documentos del expediente</h2><p class="small muted">Los archivos se guardan solo en este dispositivo (IndexedDB). No se envían a ningún servidor.</p><label for="up">Adjuntar archivo (PDF, Word, imagen)</label><input type="file" id="up" multiple><div class="list" id="dl" style="margin-top:.8rem"></div></div>';
+    const draw=()=>{ tc.querySelector('#dl').innerHTML=(p.documentos||[]).map(d=>'<div class="item row between"><div><b>📎 '+E(d.nombre)+'</b><div class="small muted">'+Math.round(d.size/1024)+' KB · '+LM.fmt(d.fecha)+'</div></div><div class="row"><button class="btn sm" data-open="'+d.id+'">Abrir</button><button class="btn sm danger" data-rm="'+d.id+'">Quitar</button></div></div>').join('')||'<p class="muted small">Aún no hay documentos.</p>';
+      tc.querySelectorAll('[data-open]').forEach(b=>b.onclick=async()=>{ try{ const blob=await LM.fileGet(b.dataset.open); if(!blob) return LM.toast('Archivo no disponible en este dispositivo'); const d=p.documentos.find(x=>x.id===b.dataset.open); LM.download(d.nombre,blob); }catch(e){ LM.toast('No se pudo abrir: '+e.message); } });
+      tc.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{ p.documentos=p.documentos.filter(x=>x.id!==b.dataset.rm); LM.save(); try{ await LM.fileDel(b.dataset.rm); }catch(e){} LM.toast('Documento quitado'); draw(); }); };
+    tc.querySelector('#up').onchange=async e=>{ for(const f of e.target.files){ const id='f'+LM.uid(); try{ await LM.filePut(id,f); p.documentos.push({id,nombre:f.name,size:f.size,tipo:f.type,fecha:LM.iso(LM.today())}); }catch(err){ LM.toast('Error guardando '+f.name); } } LM.save(); LM.toast('Documento(s) adjuntado(s) ✓'); e.target.value=''; draw(); }; draw();
+  }
+  if(tab==='radicado'){ tc.innerHTML='<div class="card"><h2>Descomposición del radicado</h2>'+(r.ok?'<p class="okt">✓ Estructura válida</p>':'<p class="err">'+r.errors.map(E).join('<br>')+'</p>')+LM.radPartsHtml(r)+'<p class="small muted" style="margin-top:.8rem">Estructura de 23 dígitos: departamento (2) + municipio (3) + entidad (2) + especialidad (2) + despacho (3) + año (4) + consecutivo (5) + instancia (2). Catálogo de códigos parcial en la maqueta.</p></div>'; }
+  if(tab==='notas'){ tc.innerHTML='<div class="card"><label for="nt">Notas internas del proceso</label><textarea id="nt" style="min-height:200px">'+E(p.notas||'')+'</textarea><button class="btn primary" id="sv" style="margin-top:.6rem">Guardar notas</button></div>'; tc.querySelector('#sv').onclick=()=>{ p.notas=tc.querySelector('#nt').value; LM.save(); LM.toast('Notas guardadas ✓'); }; }
+};
+LM.eventForm=function(p,done,pre){ pre=pre||{}; const S=LM.state;
+  LM.modal('<h2>Nuevo evento</h2><form id="ef">'+(p?'':'<label for="e-p">Proceso</label><select id="e-p">'+S.procesos.map(x=>'<option value="'+x.id+'">'+LM.fmtRad(x.radicado)+' · '+E(x.medio)+'</option>').join('')+'</select>')+'<label for="e-t">Tipo</label><select id="e-t"><option value="audiencia">Audiencia</option><option value="vencimiento">Vencimiento de término</option><option value="tarea">Tarea</option></select><label for="e-ti">Título</label><input id="e-ti" value="'+E(pre.titulo||'')+'" required><div class="grid g2"><div><label for="e-f">Fecha</label><input type="date" id="e-f" value="'+(pre.fecha||LM.iso(LM.today()))+'"></div><div><label for="e-h">Hora (opcional)</label><input type="time" id="e-h"></div></div><div class="row" style="justify-content:flex-end;margin-top:.8rem"><button type="button" class="btn" data-close>Cancelar</button><button class="btn primary">Guardar</button></div></form>',(m,close)=>{
+   m.querySelector('#ef').onsubmit=e=>{ e.preventDefault(); const proc=p||LM.proc(m.querySelector('#e-p').value); const ti=m.querySelector('#e-ti').value.trim(); if(!ti) return LM.toast('Escriba un título');
+     proc.eventos=proc.eventos||[]; proc.eventos.push({id:LM.uid(),tipo:m.querySelector('#e-t').value,titulo:ti,fecha:m.querySelector('#e-f').value,hora:m.querySelector('#e-h').value,preparada:false}); LM.save(); close(); LM.toast('Evento agregado a la agenda ✓'); done&&done(); }; }); };
+
+V.clientes=function(el,args){
+  const S=LM.state;
+  if(args[0]){ const c=LM.cli(args[0]); const ps=S.procesos.filter(p=>p.clienteId===c.id);
+    el.innerHTML='<a href="#/clientes" class="small">← Clientes</a><h1 style="margin-top:.4rem">'+E(c.nombre)+'</h1><div class="card small"><div class="grid g3"><div><b>Tipo</b><br>'+E(c.tipo)+'</div><div><b>Documento</b><br>'+E(c.doc)+'</div><div><b>Contacto</b><br>'+E(c.email)+'<br>'+E(c.tel)+' · '+E(c.ciudad)+'</div></div></div><h2 style="margin-top:1rem">Procesos ('+ps.length+')</h2><div class="list">'+ps.map(p=>'<a class="item" href="#/proceso/'+p.id+'"><div class="row between"><span class="mono">'+LM.fmtRad(p.radicado)+'</span>'+LM.estadoChip(p)+'</div><b>'+E(p.medio)+'</b> vs. '+E(p.demandado)+'<div class="small muted">'+E(p.etapa)+'</div></a>').join('')+'</div>'; return; }
+  el.innerHTML='<div class="row between"><h1>Clientes</h1><button class="btn primary" id="nc">＋ Nuevo cliente</button></div><div class="grid g3" style="margin-top:.6rem">'+S.clientes.map(c=>{ const ps=S.procesos.filter(p=>p.clienteId===c.id); return '<a class="card item" href="#/clientes/'+c.id+'"><b>'+E(c.nombre)+'</b><div class="small muted">'+E(c.tipo)+' · '+E(c.ciudad)+'</div><div class="row" style="margin-top:.5rem"><span class="chip info">'+ps.length+' procesos</span><span class="chip ok">'+ps.filter(p=>p.estado==='Activo').length+' activos</span></div></a>'; }).join('')+'</div>';
+  el.querySelector('#nc').onclick=()=>LM.modal('<h2>Nuevo cliente</h2><form id="cf"><label for="c-n">Nombre o razón social</label><input id="c-n" required><div class="grid g2"><div><label for="c-t">Tipo</label><select id="c-t"><option>Persona natural</option><option>Persona jurídica</option><option>Consorcio</option><option>Entidad pública</option></select></div><div><label for="c-d">Documento</label><input id="c-d"></div><div><label for="c-e">Correo</label><input id="c-e" type="email"></div><div><label for="c-te">Teléfono / WhatsApp</label><input id="c-te"></div></div><label for="c-c">Ciudad</label><input id="c-c"><div class="row" style="justify-content:flex-end;margin-top:.8rem"><button type="button" class="btn" data-close>Cancelar</button><button class="btn primary">Guardar</button></div></form>',(m,close)=>{
+    m.querySelector('#cf').onsubmit=e=>{ e.preventDefault(); const n=m.querySelector('#c-n').value.trim(); if(!n) return LM.toast('Escriba el nombre'); S.clientes.push({id:'c'+LM.uid(),nombre:n,tipo:m.querySelector('#c-t').value,doc:m.querySelector('#c-d').value,email:m.querySelector('#c-e').value,tel:m.querySelector('#c-te').value,ciudad:m.querySelector('#c-c').value}); LM.save(); close(); LM.toast('Cliente creado ✓'); V.clientes(el,[]); }; });
+};
+})();
