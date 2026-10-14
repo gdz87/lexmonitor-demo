@@ -27,3 +27,8 @@ CONEXIÓN CON EL SITIO WEB (/sitio/) — SOLO DEMO
 - Configuración > "Inteligencia artificial (Google Gemini)": pegar clave (aistudio.google.com/apikey), Probar conexión, Borrar clave. Guardada solo en localStorage ('lm_gemini_key'); nunca en el código ni en el respaldo JSON.
 - Borradores > Instrucciones para IA > panel "Analizar con IA": cargar texto/.txt/.pdf (pdf.js CDN)/.docx (mammoth CDN), resultado Markdown, copiar/descargar/guardar en Notas. Sin clave: resultado de EJEMPLO marcado como simulación.
 - Plan gratuito: Google puede usar los datos; no subir datos reales de clientes.
+
+=== Versión 5: Generar documento y plantillas con membrete ===
+- Analizar con IA tiene dos modos: "Analizar / comparar documentos" y "Generar documento" (tipo + proceso + instrucciones; faltantes como [COMPLETAR: ...]). Resultado editable (✎ Editar) antes de exportar.
+- Configuración > "Plantillas con membrete (Word)": .docx guardados en IndexedDB 'lexmonitor-membretes'; vista previa, predeterminada, eliminar. Marcador opcional {{CONTENIDO}}.
+- "📄 Exportar a Word" (JSZip CDN) en resultados de IA y en Borradores > Plantillas; conserva encabezado, pie, márgenes y estilos. Sin plantilla: genérica con el nombre de la firma.

@@ -941,11 +941,12 @@ const P=[
  ['comparar','Comparar documentos','Actúa como asistente jurídico en derecho administrativo colombiano. Compara los dos documentos que te entrego (por ejemplo, demanda vs. contestación, o versión A vs. versión B de un contrato o acto administrativo).','ESTRUCTURA (presenta cada punto como TABLA con columnas: Tema | Documento A (cita textual) | Documento B (cita textual) | Observación)\n1. Coincidencias.\n2. Diferencias (agregados, supresiones y cambios de redacción).\n3. Hechos: aceptados / negados / no contestados (si es demanda vs. contestación), uno por uno, con el fragmento de cada documento.\n4. Pretensiones vs. excepciones: qué excepción responde a cada pretensión; si ninguna, escribe "No consta".\n5. Resumen de los cambios o puntos en disputa más relevantes.\nCada fila debe citar entre comillas el fragmento exacto de cada documento con su ubicación (página, numeral o párrafo). Si un tema no aparece en uno de los documentos, escribe "No consta" en esa celda.','DOCUMENTO A\n[Pegue aquí el texto ANONIMIZADO del primer documento]\n\nDOCUMENTO B\n[Pegue aquí el texto ANONIMIZADO del segundo documento]'],
  ['contradicciones','Detectar contradicciones','Actúa como revisor(a) jurídico(a) en derecho administrativo colombiano. Revisa los hechos, pruebas y fundamentos del expediente o escrito que te entrego y detecta inconsistencias.','ESTRUCTURA (presenta una TABLA con columnas: N.º | Tipo | Ubicación textual (cita entre comillas y página/numeral/párrafo) | Descripción | Importancia: alta/media/baja)\n1. Contradicciones internas entre afirmaciones.\n2. Fechas inconsistentes (orden imposible, fechas que no coinciden entre partes del documento).\n3. Hechos sin prueba que los soporte en el documento.\n4. Pruebas aportadas o solicitadas que no se relacionan con ningún hecho.\n5. Fundamentos de derecho que no corresponden a los hechos o pretensiones.\nNo concluyas ni supongas nada que no esté en el documento: describe la inconsistencia y deja la valoración al abogado. Si no encuentras elementos de una categoría, escribe "No se encontraron en el documento".']
 ];
-LM.PROMPTS=P;
+LM.PROMPTS=P; LM.REGLAS_IA=REGLAS;
 function datosProceso(p,anon){ const c=LM.cli(p.clienteId); const nc=x=>v(x)||'No consta'; const cn=anon?'[CLIENTE]':c.nombre;
   const dte=anon&&p.demandante===c.nombre?'[CLIENTE]':(anon?'[DEMANDANTE]':p.demandante);
   const acts=(p.actuaciones||[]).slice().sort((a,b)=>a.fecha<b.fecha?1:-1).slice(0,6);
   return 'DATOS DEL PROCESO (registrados en '+LM.state.config.appName+'; verifíquelos contra el expediente)\n- Radicado: '+(anon?'[RADICADO]':nc(LM.fmtRad(p.radicado)))+'\n- Medio de control: '+nc(p.medio)+'\n- Despacho: '+nc(p.despacho)+'\n- Ponente / juez: '+nc(p.ponente)+'\n- Cliente: '+(c.id?cn:'No consta')+'\n- Demandante: '+nc(dte)+'\n- Demandado: '+nc(p.demandado)+'\n- Etapa: '+nc(p.etapa)+'\n- Resumen interno: '+nc(anon?String(p.resumen||'').split(c.nombre).join('[CLIENTE]'):p.resumen)+'\n- Últimas actuaciones registradas:\n'+(acts.map(a=>'  • '+a.fecha+' – '+a.titulo+(a.detalle?': '+a.detalle:'')).join('\n')||'  No consta')+'\n'; }
+LM.datosProceso=(p,a)=>datosProceso(p,a);
 LM.buildPrompt=function(key,p,opt){ const t=P.find(x=>x[0]===key); opt=opt||{};
   const data=opt.fill&&p?datosProceso(p,opt.anon):'DATOS DEL PROCESO\n- Radicado: [completar]\n- Medio de control: [completar]\n- Despacho: [completar]\n- Partes: [completar]\n- Etapa: [completar]\n';
   return t[2]+'\n\n'+REGLAS+'\n\n'+t[3]+'\n\n'+data+'\n'+(t[4]||'DOCUMENTOS\n[Pegue aquí el texto ANONIMIZADO de la demanda, providencia o documentos pertinentes]')+'\n\nFORMATO DE SALIDA\nTexto en español jurídico formal, con títulos en mayúscula, listo para revisión del abogado. Marca como [VERIFICAR] cualquier afirmación que no esté soportada en los documentos.'; };
@@ -1083,40 +1084,66 @@ const SIM={
  comparar:'## COMPARACIÓN DE DOCUMENTOS (EJEMPLO)\n\n### 1. Coincidencias\n| Tema | Documento A (cita textual) | Documento B (cita textual) | Observación |\n|---|---|---|---|\n| Fecha del acto | "Resolución 123 del 5 de marzo de 2025" (hecho 2) | "la Resolución 123 del 5 de marzo de 2025" (num. 2) | Ambos coinciden |\n\n### 2. Diferencias\n| Tema | Documento A | Documento B | Observación |\n|---|---|---|---|\n| Notificación | "notificada el 10 de marzo" (hecho 3) | "notificada el 7 de marzo" (num. 3) | Fechas distintas [VERIFICAR] |\n| Cuantía | "$45.000.000" (pretensión 2) | No consta | El documento B no se pronuncia |\n\n### 3. Hechos\n- Hecho 1: **aceptado**.\n- Hecho 3: **negado** parcialmente (fecha de notificación).\n- Hecho 4: **no contestado**.\n\n### 5. Resumen\nEl punto en disputa más relevante es la fecha de notificación, que incide en la caducidad.\n\n### PUNTOS A VERIFICAR POR EL ABOGADO\n- Constancia de notificación de la Resolución 123.',
  contradicciones:'## CONTRADICCIONES DETECTADAS (EJEMPLO)\n\n| N.º | Tipo | Ubicación textual | Descripción | Importancia |\n|---|---|---|---|---|\n| 1 | Fechas inconsistentes | "radicó la petición el 2 de mayo" (hecho 4) vs. "petición del 12 de mayo" (hecho 7) | La misma petición aparece con dos fechas | alta |\n| 2 | Hecho sin prueba | "fue desvinculado sin aviso previo" (hecho 5) | No se relaciona prueba que lo soporte | media |\n| 3 | Prueba no relacionada | "certificado de tradición" (prueba 6) | No se vincula con ningún hecho | baja |\n\n**Fundamentos que no corresponden:** No se encontraron en el documento.\n\n### PUNTOS A VERIFICAR POR EL ABOGADO\n- Fecha real de radicación de la petición.',
  def:'## BORRADOR GENERADO (EJEMPLO)\n\n### ENCABEZADO\nDespacho: No consta · Radicado: [RADICADO]\n\n### DESARROLLO\n1. Hecho primero, tomado del documento entregado.\n2. Argumento propuesto **[VERIFICAR]**.\n\n### PUNTOS A VERIFICAR POR EL ABOGADO\n- Datos que no constan en los documentos.'};
-/* ---------- Panel de análisis en la vista IA ---------- */
+/* ---------- Generar documento ---------- */
+const DEMANDA='ESTRUCTURA\n1. Designación del despacho y de las partes con sus representantes.\n2. Pretensiones, numeradas.\n3. Hechos, numerados (solo los que constan).\n4. Normas violadas y concepto de la violación (citas textuales o [norma por verificar]).\n5. Pruebas que se aportan y que se solicitan.\n6. Estimación razonada de la cuantía (si no consta, [COMPLETAR: cuantía]).\n7. Anexos y notificaciones.';
+function genTypes(){ const T=LM.TPL||{}, P=LM.PROMPTS||[]; const L=Object.keys(T).map(k=>({k:'tpl:'+k,n:T[k].n,src:'Borradores'}));
+  L.push({k:'demanda',n:'Demanda (medio de control del proceso)'});
+  P.filter(x=>['contestacion','reposicion','apelacion','tutela','concepto'].includes(x[0])).forEach(x=>L.push({k:'p:'+x[0],n:x[1]})); return L; }
+const RGEN='REGLAS OBLIGATORIAS\n1. Usa SOLO los datos que te entrego. Nunca inventes nombres, fechas, radicados, cifras, normas ni jurisprudencia.\n2. Todo dato que falte márcalo exactamente así: [COMPLETAR: descripción del dato] (por ejemplo [COMPLETAR: fecha de notificación]).\n3. Las citas normativas solo si el texto está en lo que te entrego; si no, escribe [norma por verificar: …].\n4. Distingue hechos (datos del proceso) de argumentos.\n5. Al final, agrega la sección "PUNTOS A VERIFICAR POR EL ABOGADO".';
+LM.genPrompt=function(tk,p,extra,anon){ const C=LM.state.config, c=LM.cli(p.clienteId)||{}; let base='', role='Actúa como abogado(a) litigante en derecho administrativo colombiano. Redacta un BORRADOR completo de ';
+  const t=genTypes().find(x=>x.k===tk)||{n:tk};
+  if(tk.indexOf('tpl:')===0){ let m=LM.TPL[tk.slice(4)].t(p,c,C); if(anon){ m=m.split(c.nombre||'\u0000').join('[CLIENTE]').split(p.radicado||'\u0000').join('[RADICADO]').split(LM.fmtRad(p.radicado)).join('[RADICADO]'); } base='MODELO DE REFERENCIA DE LA FIRMA (respeta su estructura y mejora la redacción; completa con los datos del proceso):\n"""\n'+m+'\n"""'; }
+  else if(tk==='demanda') base=DEMANDA;
+  else { const x=LM.PROMPTS.find(q=>q[0]===tk.slice(2)); role=x[2]+' Redacta el documento completo: '; base=x[3]; }
+  return role+t.n.toUpperCase()+'.\n\n'+RGEN+'\n\n'+base+'\n\n'+LM.datosProceso(p,anon)+'\nDATOS DE LA FIRMA\n- Abogado(a): '+(C.abogado||'[COMPLETAR: abogado]')+'\n- Tarjeta profesional: '+(C.tp||'[COMPLETAR: T.P.]')+'\n- Correo: '+(C.email||'[COMPLETAR: correo]')+'\n- Ciudad: '+(C.ciudad||'[COMPLETAR: ciudad]')+'\n\n'+(extra?'INSTRUCCIONES ADICIONALES DEL ABOGADO\n'+extra+'\n\n':'')+'FORMATO DE SALIDA\nMarkdown: títulos con ## para cada sección, **negrita** para lo destacado y listas numeradas. Español jurídico formal, listo para revisión.'; };
+function simGen(tk,p){ const c=LM.cli(p.clienteId)||{}; let body;
+  if(tk.indexOf('tpl:')===0) body=LM.TPL[tk.slice(4)].t(p,c,LM.state.config).replace(/^_{3,}.*$/gm,'[COMPLETAR: firma]');
+  else body='## ENCABEZADO\nSeñores\n'+(p.despacho||'[COMPLETAR: despacho]')+'\nRadicado: '+LM.fmtRad(p.radicado)+'\n\n## HECHOS\n1. '+(p.resumen||'[COMPLETAR: hechos]')+'\n2. [COMPLETAR: fecha de notificación del acto]\n\n## PETICIONES\n1. [COMPLETAR: petición concreta]';
+  return '> SIMULACIÓN: texto de ejemplo armado con la plantilla; no lo redactó la IA.\n\n'+body+'\n\n## PUNTOS A VERIFICAR POR EL ABOGADO\n- Revise cada [COMPLETAR: …] antes de radicar.'; }
+/* ---------- Panel de IA (dos modos) ---------- */
 LM.iaAttach=function(el,getKey,getPid,getPrompt,getTitle){ const box=document.createElement('div'); box.className='card'; box.id='ia-run'; box.style.marginTop='1rem'; el.appendChild(box);
-  const docs={A:'',B:''}; let last='';
+  const docs={A:'',B:''}; let last=null, mode='analizar', gk=genTypes()[0].k, extra='', gp=null, ganon=true;
   const slot=(id,t)=>'<div class="ia-doc"><label for="ia-d'+id+'">'+t+'</label><textarea id="ia-d'+id+'" data-d="'+id+'" style="min-height:120px" placeholder="Pegue aquí el texto ANONIMIZADO…">'+E(docs[id])+'</textarea><div class="row"><label class="btn sm" for="ia-f'+id+'" style="margin:0">📎 Subir archivo (.txt, .pdf, .docx)</label><input type="file" id="ia-f'+id+'" data-f="'+id+'" accept=".txt,.md,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hide"><span class="small muted" id="ia-s'+id+'"></span></div></div>';
-  const draw=()=>{ const key=getKey(), two=key==='comparar', has=!!LM.gemKey();
-    box.innerHTML='<h2>⚡ Analizar con IA</h2><p class="small muted">Ejecuta la instrucción de arriba con Google Gemini ('+E(LM.gemModel())+') sobre los documentos que cargue aquí.</p>'+AVISO+
-     (has?'':'<p class="small"><span class="chip warn">Sin clave de API</span> Se mostrará un <b>resultado de ejemplo (simulación)</b>. Para usar la IA real, pegue su clave en <a href="#/config">⚙ Configuración → Inteligencia artificial</a> (se obtiene gratis en aistudio.google.com/apikey).</p>')+
-     '<div class="grid'+(two?' g2':'')+'">'+(two?slot('A','Documento A')+slot('B','Documento B'):slot('A',key==='contradicciones'?'Documento a revisar':'Documento(s)'))+'</div>'+
-     '<div class="row" style="margin-top:.6rem"><button class="btn primary" id="ia-go">⚡ Analizar con IA</button><span class="small muted" id="ia-st" aria-live="polite"></span></div><div id="ia-res"></div>';
-    box.querySelectorAll('[data-d]').forEach(t=>t.oninput=()=>docs[t.dataset.d]=t.value);
-    box.querySelectorAll('[data-f]').forEach(inp=>inp.onchange=async()=>{ const f=inp.files[0], id=inp.dataset.f, s=box.querySelector('#ia-s'+id); if(!f) return; s.textContent='Leyendo '+f.name+'…';
-      try{ const t=await LM.readDoc(f); docs[id]=t; box.querySelector('#ia-d'+id).value=t; s.textContent='✓ '+f.name+' ('+t.length.toLocaleString('es-CO')+' caracteres)'; }
-      catch(e){ s.textContent=''; LM.toast('No se pudo leer '+f.name+': '+e.message); } inp.value=''; });
-    box.querySelector('#ia-go').onclick=run; if(last) show(last.text,last.sim); };
-  const show=(text,sim)=>{ last={text,sim}; const r=box.querySelector('#ia-res');
-    r.innerHTML='<div class="row between" style="margin-top:1rem"><h3 style="margin:0">Resultado'+(sim?' <span class="chip warn">SIMULACIÓN · ejemplo, no es un análisis real</span>':'')+'</h3><div class="row"><button class="btn sm" id="ia-cp">📋 Copiar</button><button class="btn sm" id="ia-dl">⬇ Descargar</button><button class="btn sm" id="ia-nt">📝 Guardar como nota</button></div></div><p class="small" style="color:#a35d00">Revise siempre el resultado antes de usarlo: la IA puede equivocarse.</p><div class="md-out">'+LM.md(text)+'</div>';
-    r.querySelector('#ia-cp').onclick=()=>(navigator.clipboard?navigator.clipboard.writeText(text):Promise.reject()).then(()=>LM.toast('Resultado copiado ✓'),()=>LM.toast('No se pudo copiar'));
-    r.querySelector('#ia-dl').onclick=()=>{ LM.download('Analisis_IA_'+getKey()+'_'+LM.iso(LM.today())+'.md',(sim?'> SIMULACIÓN: resultado de ejemplo\n\n':'')+text,'text/markdown'); LM.toast('Resultado descargado ✓'); };
-    r.querySelector('#ia-nt').onclick=()=>{ const p=LM.proc(getPid()); if(!p) return LM.toast('Seleccione un proceso');
-      p.notas=(p.notas?p.notas+'\n\n':'')+'--- Análisis con IA: '+getTitle()+' ('+new Date().toLocaleString('es-CO')+')'+(sim?' [SIMULACIÓN]':'')+' — revisar ---\n'+text; LM.save(); LM.toast('Guardado en Notas del proceso ✓'); }; };
-  async function run(){ const key=getKey(), two=key==='comparar', st=box.querySelector('#ia-st'), go=box.querySelector('#ia-go');
-    const A=docs.A.trim(), B=docs.B.trim();
+  const draw=()=>{ const key=getKey(), two=key==='comparar', has=!!LM.gemKey(); gp=gp||getPid();
+    const modes='<div class="subnav" role="tablist" aria-label="Modo"><button class="btn sm'+(mode==='analizar'?' active primary':'')+'" data-mode="analizar" role="tab">🔍 Analizar / comparar documentos</button><button class="btn sm'+(mode==='generar'?' active primary':'')+'" data-mode="generar" role="tab">✍ Generar documento</button></div>';
+    const an='<p class="small muted">Ejecuta la instrucción de arriba (<b>'+E(getTitle())+'</b>) con Google Gemini ('+E(LM.gemModel())+') sobre los documentos que cargue aquí.</p><div class="grid'+(two?' g2':'')+'">'+(two?slot('A','Documento A')+slot('B','Documento B'):slot('A',key==='contradicciones'?'Documento a revisar':'Documento(s)'))+'</div><div class="row" style="margin-top:.6rem"><button class="btn primary" id="ia-go">⚡ Analizar con IA</button><span class="small muted" id="ia-st" aria-live="polite"></span></div>';
+    const ge='<p class="small muted">La IA redacta el documento con los datos registrados del proceso (partes, radicado, despacho, hechos y actuaciones) y los de la firma. Lo que falte quedará marcado como <b>[COMPLETAR: …]</b>; nunca se inventa.</p><div class="grid g2"><div><label for="ig-t">Tipo de documento</label><select id="ig-t">'+genTypes().map(x=>'<option value="'+x.k+'"'+(x.k===gk?' selected':'')+'>'+E(x.n)+(x.src?' (plantilla)':'')+'</option>').join('')+'</select></div><div><label for="ig-p">Proceso</label><select id="ig-p">'+LM.state.procesos.map(p=>'<option value="'+p.id+'"'+(p.id===gp?' selected':'')+'>'+LM.fmtRad(p.radicado).slice(0,24)+' · '+E(p.medio)+'</option>').join('')+'</select></div></div><label for="ig-x">Instrucciones adicionales (opcional)</label><textarea id="ig-x" style="min-height:80px" placeholder="Ej.: enfatizar la caducidad; tono conciliador; pedir audiencia…">'+E(extra)+'</textarea><label class="row" style="font-weight:500"><input type="checkbox" id="ig-a"'+(ganon?' checked':'')+'> Anonimizar cliente y radicado al enviar a la IA</label><div class="row" style="margin-top:.6rem"><button class="btn primary" id="ig-go">✍ Generar documento</button><span class="small muted" id="ia-st" aria-live="polite"></span></div>';
+    box.innerHTML='<h2>⚡ Analizar con IA</h2>'+modes+AVISO+(has?'':'<p class="small"><span class="chip warn">Sin clave de API</span> Se mostrará un <b>resultado de ejemplo (simulación)</b>. Para usar la IA real, pegue su clave en <a href="#/config">⚙ Configuración → Inteligencia artificial</a> (se obtiene gratis en aistudio.google.com/apikey).</p>')+(mode==='generar'?ge:an)+'<div id="ia-res"></div>';
+    box.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{ mode=b.dataset.mode; last=null; draw(); });
+    if(mode==='generar'){ box.querySelector('#ig-t').onchange=e=>gk=e.target.value; box.querySelector('#ig-p').onchange=e=>gp=e.target.value; box.querySelector('#ig-x').oninput=e=>extra=e.target.value; box.querySelector('#ig-a').onchange=e=>ganon=e.target.checked; box.querySelector('#ig-go').onclick=runGen; }
+    else { box.querySelectorAll('[data-d]').forEach(t=>t.oninput=()=>docs[t.dataset.d]=t.value);
+      box.querySelectorAll('[data-f]').forEach(inp=>inp.onchange=async()=>{ const f=inp.files[0], id=inp.dataset.f, s=box.querySelector('#ia-s'+id); if(!f) return; s.textContent='Leyendo '+f.name+'…';
+        try{ const t=await LM.readDoc(f); docs[id]=t; box.querySelector('#ia-d'+id).value=t; s.textContent='✓ '+f.name+' ('+t.length.toLocaleString('es-CO')+' caracteres)'; }
+        catch(e){ s.textContent=''; LM.toast('No se pudo leer '+f.name+': '+e.message); } inp.value=''; });
+      box.querySelector('#ia-go').onclick=run; }
+    if(last) show(last.text,last.sim,last.title); };
+  const show=(text,sim,title)=>{ last={text,sim,title}; const r=box.querySelector('#ia-res'); let editing=false;
+    r.innerHTML='<div class="row between" style="margin-top:1rem"><h3 style="margin:0">'+E(title)+(sim?' <span class="chip warn">SIMULACIÓN · ejemplo, no es un análisis real</span>':'')+'</h3><div class="row"><button class="btn sm" id="ia-ed">✎ Editar</button><button class="btn sm primary" id="ia-wd">📄 Exportar a Word</button><button class="btn sm" id="ia-cp">📋 Copiar</button><button class="btn sm" id="ia-dl">⬇ .md</button><button class="btn sm" id="ia-nt">📝 Guardar como nota</button></div></div><p class="small" style="color:#a35d00">Revise siempre el resultado antes de usarlo: la IA puede equivocarse.'+(/\[COMPLETAR/.test(text)?' Complete los campos <b>[COMPLETAR: …]</b>.':'')+'</p><textarea id="ia-txt" class="prompt-out hide" style="min-height:360px">'+E(text)+'</textarea><div class="md-out">'+LM.md(text)+'</div>';
+    const ta=r.querySelector('#ia-txt'), out=r.querySelector('.md-out'), cur=()=>{ last.text=ta.value; return ta.value; };
+    r.querySelector('#ia-ed').onclick=e=>{ editing=!editing; ta.classList.toggle('hide',!editing); out.classList.toggle('hide',editing); if(!editing) out.innerHTML=LM.md(cur()); e.target.textContent=editing?'👁 Vista previa':'✎ Editar'; };
+    const fname=()=>(title||'Documento').replace(/\s+/g,'_')+'_'+LM.iso(LM.today());
+    r.querySelector('#ia-wd').onclick=()=>LM.exportWord((sim?'':'')+cur(),fname());
+    r.querySelector('#ia-cp').onclick=()=>(navigator.clipboard?navigator.clipboard.writeText(cur()):Promise.reject()).then(()=>LM.toast('Resultado copiado ✓'),()=>LM.toast('No se pudo copiar'));
+    r.querySelector('#ia-dl').onclick=()=>{ LM.download(fname()+'.md',(sim?'> SIMULACIÓN: resultado de ejemplo\n\n':'')+cur(),'text/markdown'); LM.toast('Resultado descargado ✓'); };
+    r.querySelector('#ia-nt').onclick=()=>{ const p=LM.proc(mode==='generar'?gp:getPid()); if(!p) return LM.toast('Seleccione un proceso');
+      p.notas=(p.notas?p.notas+'\n\n':'')+'--- IA: '+title+' ('+new Date().toLocaleString('es-CO')+')'+(sim?' [SIMULACIÓN]':'')+' — revisar ---\n'+cur(); LM.save(); LM.toast('Guardado en Notas del proceso ✓'); }; };
+  async function exec(prompt,simText,title,btn){ const st=box.querySelector('#ia-st');
+    if(!LM.gemKey()){ st.textContent='Simulación (sin clave)'; return show(simText,true,title); }
+    btn.disabled=true; st.innerHTML='<span class="spin" aria-hidden="true"></span> Trabajando con Gemini… puede tardar hasta un minuto';
+    try{ const t=await LM.gemRun(prompt); st.textContent='✓ Listo'; show(t,false,title); }
+    catch(e){ st.textContent=''; box.querySelector('#ia-res').innerHTML='<div class="card" style="border-color:#c0392b;margin-top:1rem"><b>❌ No se pudo completar.</b><p class="small">'+E(e.message)+'</p></div>'; }
+    finally{ btn.disabled=false; } }
+  function run(){ const key=getKey(), two=key==='comparar'; const A=docs.A.trim(), B=docs.B.trim();
     if(!A||(two&&!B)) return LM.toast(two?'Cargue los dos documentos (A y B)':'Cargue o pegue al menos un documento');
     const base=getPrompt().split('\n').filter(l=>!/\[Pegue aquí/.test(l)&&!/^(DOCUMENTOS?|DOCUMENTO [AB])\s*$/.test(l.trim())).join('\n');
     const prompt=base+'\n\n'+(two?'DOCUMENTO A\n"""\n'+A+'\n"""\n\nDOCUMENTO B\n"""\n'+B+'\n"""':'DOCUMENTOS\n"""\n'+A+'\n"""')+'\n\nResponde en Markdown (usa tablas Markdown cuando la estructura pida tablas).';
-    if(!LM.gemKey()){ st.textContent='Simulación (sin clave)'; return show(SIM[key]||SIM.def,true); }
-    go.disabled=true; st.innerHTML='<span class="spin" aria-hidden="true"></span> Analizando con Gemini… puede tardar hasta un minuto';
-    try{ const t=await LM.gemRun(prompt); st.textContent='✓ Listo'; show(t,false); }
-    catch(e){ st.textContent=''; box.querySelector('#ia-res').innerHTML='<div class="card" style="border-color:#c0392b;margin-top:1rem"><b>❌ No se pudo analizar.</b><p class="small">'+E(e.message)+'</p></div>'; }
-    finally{ go.disabled=false; } }
+    exec(prompt,SIM[key]||SIM.def,getTitle(),box.querySelector('#ia-go')); }
+  function runGen(){ const p=LM.proc(gp); if(!p) return LM.toast('Seleccione un proceso'); const t=genTypes().find(x=>x.k===gk);
+    exec(LM.genPrompt(gk,p,extra.trim(),ganon),simGen(gk,p),t.n,box.querySelector('#ig-go')); }
   draw(); return draw; };
 /* ---------- Configuración ---------- */
 const origC=V.config; V.config=function(el,args){ origC(el,args); const k=LM.gemKey();
-  const card='<div class="card" style="margin-top:1rem" id="cf-ia"><h2>🤖 Inteligencia artificial (Google Gemini)</h2><p class="small muted">Pegue su clave de API de Gemini para que <b>Borradores → 🤖 Instrucciones para IA → ⚡ Analizar con IA</b> ejecute las instrucciones. Obténgala gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. La clave se guarda solo en este navegador (no se exporta en el respaldo JSON ni se envía a ningún servidor distinto de Google).</p>'+AVISO+
+  const card='<div class="card" style="margin-top:1rem" id="cf-ia"><h2>🤖 Inteligencia artificial (Google Gemini)</h2><p class="small muted">Pegue su clave de API de Gemini para que <b>Borradores → 🤖 Instrucciones para IA → ⚡ Analizar con IA</b> analice documentos y genere escritos. Obténgala gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. La clave se guarda solo en este navegador (no se exporta en el respaldo JSON ni se envía a ningún servidor distinto de Google).</p>'+AVISO+
    '<label for="cf-gk">Clave de API</label><div class="row" style="flex-wrap:nowrap"><input id="cf-gk" type="password" autocomplete="off" spellcheck="false" placeholder="AIza…" value="'+E(k)+'" style="flex:1"><button class="btn sm" id="cf-gkv" type="button" aria-label="Mostrar u ocultar clave">👁</button></div>'+
    '<label for="cf-gm">Modelo</label><input id="cf-gm" value="'+E(LM.gemModel())+'">'+
    '<div class="row" style="margin-top:.6rem"><button class="btn primary" id="cf-gs">💾 Guardar clave</button><button class="btn" id="cf-gt">🔌 Probar conexión</button><button class="btn danger" id="cf-gd">🗑 Borrar clave</button></div><p class="small" id="cf-gmsg">'+(k?'<span class="chip ok">Clave guardada</span>':'<span class="chip">Sin clave: el análisis funciona en modo simulación</span>')+'</p></div>';
@@ -1129,6 +1156,95 @@ const origC=V.config; V.config=function(el,args){ origC(el,args); const k=LM.gem
     try{ const n=await LM.gemTest(v); msg('<span class="chip ok">✓ Conexión correcta</span> Modelo disponible: '+E(n)); }catch(e){ msg('<span class="chip warn">Error</span> '+E(e.message)); } };
   $('#cf-gd').onclick=()=>{ if(!confirm('¿Borrar la clave de API de este navegador?')) return; try{ localStorage.removeItem(KK); }catch(e){} $('#cf-gk').value=''; msg('<span class="chip">Clave borrada: modo simulación</span>'); LM.toast('Clave borrada'); };
 };
+})();
+
+</script>
+<script>
+/* Plantillas con membrete (.docx en IndexedDB) y Exportar a Word con JSZip */
+(function(){
+const LM=window.LM, V=LM.views, E=LM.esc;
+const JSZIP='https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', MARK='{{CONTENIDO}}';
+let jzp=null; function jszip(){ if(window.JSZip) return Promise.resolve(window.JSZip); return jzp=jzp||new Promise((ok,ko)=>{ const s=document.createElement('script'); s.src=JSZIP; s.onload=()=>ok(window.JSZip); s.onerror=()=>{ jzp=null; ko(new Error('No se pudo descargar el componente de Word (¿sin conexión?)')); }; document.head.appendChild(s); }); }
+/* ---------- IndexedDB ---------- */
+let dbp=null; function db(){ return dbp=dbp||new Promise((res,rej)=>{ if(!window.indexedDB) return rej(new Error('Este navegador no permite guardar plantillas (IndexedDB)')); const q=indexedDB.open('lexmonitor-membretes',1); q.onupgradeneeded=()=>q.result.createObjectStore('tpl',{keyPath:'id'}); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+const tx=async(mode,fn)=>{ const d=await db(); return new Promise((res,rej)=>{ const t=d.transaction('tpl',mode); const st=t.objectStore('tpl'); let out; const r=fn(st); if(r) r.onsuccess=()=>out=r.result; t.oncomplete=()=>res(out); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error||new Error('Operación cancelada (¿sin espacio?)')); }); };
+LM.memList=async()=>((await tx('readonly',s=>s.getAll()))||[]).sort((a,b)=>a.creado<b.creado?-1:1);
+LM.memGet=id=>tx('readonly',s=>s.get(id));
+LM.memPut=rec=>tx('readwrite',s=>s.put(rec));
+LM.memDel=id=>tx('readwrite',s=>s.delete(id));
+LM.memSetDefault=async id=>{ const L=await LM.memList(); for(const r of L){ r.def=r.id===id; await LM.memPut(r); } };
+/* ---------- XML helpers ---------- */
+const X=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const ptext=xml=>(xml.match(/<w:t(?:\s[^>]*)?>[^<]*<\/w:t>/g)||[]).map(t=>t.replace(/<[^>]+>/g,'')).join('').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+function runs(s,base){ base=base||{}; const out=[]; const re=/(\*\*[^*]+\*\*|__[^_]+__|\*[^*\s][^*]*\*)/g; let last=0,m;
+  const R=(t,b,i)=>{ if(!t) return; out.push('<w:r><w:rPr>'+((b||base.b)?'<w:b/>':'')+(i?'<w:i/>':'')+(base.sz?'<w:sz w:val="'+base.sz+'"/><w:szCs w:val="'+base.sz+'"/>':'')+'</w:rPr><w:t xml:space="preserve">'+X(t)+'</w:t></w:r>'); };
+  while((m=re.exec(s))){ R(s.slice(last,m.index)); const t=m[0]; if(t[0]==='*'&&t[1]==='*'||t[0]==='_') R(t.slice(2,-2),true); else R(t.slice(1,-1),false,true); last=re.lastIndex; } R(s.slice(last)); return out.join(''); }
+const para=(inner,ppr)=>'<w:p>'+(ppr?'<w:pPr>'+ppr+'</w:pPr>':'')+inner+'</w:p>';
+/* Markdown sencillo -> párrafos WordprocessingML */
+LM.mdToWord=function(md){ const L=String(md).replace(/\r/g,'').split('\n'); const out=[]; let i=0;
+  const cells=r=>r.trim().replace(/^\||\|$/g,'').split('|').map(x=>x.trim().replace(/<br\s*\/?>/gi,' '));
+  while(i<L.length){ const l=L[i]; let m;
+    if(/^```/.test(l)){ i++; while(i<L.length&&!/^```/.test(L[i])) out.push(para(runs(L[i++]))); i++; continue; }
+    if(/^\s*\|/.test(l)&&i+1<L.length&&/^\s*\|?\s*:?-{2,}/.test(L[i+1])){ const rows=[cells(l)]; i+=2; while(i<L.length&&/^\s*\|/.test(L[i])) rows.push(cells(L[i++]));
+      const bd='<w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(k=>'<w:'+k+' w:val="single" w:sz="4" w:space="0" w:color="808080"/>').join('')+'</w:tblBorders>';
+      out.push('<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>'+bd+'</w:tblPr>'+rows.map((r,ri)=>'<w:tr>'+r.map(c=>'<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr>'+para(runs(c,{b:ri===0,sz:20}))+'</w:tc>').join('')+'</w:tr>').join('')+'</w:tbl>'); out.push(para('')); continue; }
+    if((m=l.match(/^(#{1,6})\s+(.*)/))){ const sz=[0,30,28,26,24,24,24][m[1].length]; out.push(para(runs(m[2],{b:true,sz}),'<w:keepNext/><w:spacing w:before="240" w:after="120"/>')); i++; continue; }
+    if(/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(l)){ i++; continue; }
+    if((m=l.match(/^\s*([-*+]|\d+[.)])\s+(.*)/))){ const pre=/\d/.test(m[1])?m[1].replace(')','.')+' ':'• '; out.push(para(runs(pre+m[2]),'<w:ind w:left="567" w:hanging="283"/>')); i++; continue; }
+    if((m=l.match(/^>\s?(.*)/))){ out.push(para(runs(m[1],{}).replace(/<w:rPr>/g,'<w:rPr><w:i/>'),'<w:ind w:left="567"/>')); i++; continue; }
+    out.push(para(runs(l))); i++; }
+  return out.join(''); };
+/* ---------- Plantilla genérica ---------- */
+async function generic(){ const JSZip=await jszip(); const z=new JSZip(); const C=LM.state.config;
+  const W='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  z.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>');
+  z.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  z.file('word/_rels/document.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/></Relationships>');
+  z.file('word/styles.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles '+W+'><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="es-CO"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="300" w:lineRule="auto"/><w:jc w:val="both"/></w:pPr></w:pPrDefault></w:docDefaults></w:styles>');
+  z.file('word/header1.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr '+W+'>'+para(runs(C.firma||'',{b:true,sz:20}),'<w:jc w:val="center"/>')+para(runs([C.abogado,C.email,C.ciudad].filter(Boolean).join(' · '),{sz:16}),'<w:jc w:val="center"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="808080"/></w:pBdr>')+'</w:hdr>');
+  z.file('word/document.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document '+W+'><w:body><w:p><w:r><w:t>'+MARK+'</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rId2"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1701" w:right="1418" w:bottom="1418" w:left="1701" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr></w:body></w:document>');
+  return z.generateAsync({type:'arraybuffer'}); }
+/* ---------- Construcción del .docx ---------- */
+LM.buildDocx=async function(buf,md){ const JSZip=await jszip(); const z=await JSZip.loadAsync(buf); const f=z.file('word/document.xml'); if(!f) throw new Error('La plantilla no es un documento de Word válido (.docx)');
+  let doc=await f.async('string'); const content=LM.mdToWord(md); let done=false;
+  doc=doc.replace(/<w:p(?=[\s>])[\s\S]*?<\/w:p>/g,p=>{ if(done||ptext(p).indexOf(MARK)<0) return p; done=true; return content; });
+  if(!done){ const bm=doc.match(/<w:body>([\s\S]*)<\/w:body>/); if(!bm) throw new Error('No se encontró el cuerpo del documento en la plantilla');
+    const sm=bm[1].match(/<w:sectPr[\s\S]*<\/w:sectPr>\s*$/); doc=doc.replace(bm[0],'<w:body>'+content+(sm?sm[0]:'')+'</w:body>'); }
+  z.file('word/document.xml',doc); return z.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',compression:'DEFLATE'}); };
+LM.memInfo=async function(buf){ const JSZip=await jszip(); const z=await JSZip.loadAsync(buf); const d=z.file('word/document.xml'); if(!d) throw new Error('No es un .docx válido');
+  const names=Object.keys(z.files); const hdr=names.filter(n=>/^word\/header\d*\.xml$/.test(n)), ftr=names.filter(n=>/^word\/footer\d*\.xml$/.test(n));
+  const txt=async L=>(await Promise.all(L.map(async n=>ptext(await z.file(n).async('string'))))).filter(Boolean).join(' · ');
+  const body=await d.async('string'); const hrels=(await Promise.all(names.filter(n=>/^word\/_rels\/(header|footer)\d*\.xml\.rels$/.test(n)).map(n=>z.file(n).async('string')))).join('');
+  return {header:await txt(hdr),footer:await txt(ftr),imgs:(hrels.match(/relationships\/image"/g)||[]).length,marker:ptext(body.replace(/<\/w:p>/g,'</w:p>')).indexOf(MARK)>=0||body.replace(/<[^>]+>/g,'').indexOf(MARK)>=0,bodyText:ptext(body).slice(0,300)}; };
+/* ---------- Exportar ---------- */
+async function exportWith(id,md,fname){ try{ LM.toast('Generando Word…'); let buf; if(id){ const r=await LM.memGet(id); if(!r) throw new Error('Plantilla no encontrada'); buf=r.buf; } else buf=await generic();
+  const blob=await LM.buildDocx(buf,md); LM.download(fname.replace(/[^\w\-.áéíóúñÁÉÍÓÚÑ]+/g,'_')+'.docx',blob); LM.toast('Documento de Word descargado ✓'); }
+  catch(e){ LM.toast('No se pudo exportar: '+e.message); } }
+LM.exportWord=async function(md,fname){ let L=[]; try{ L=await LM.memList(); }catch(e){}
+  if(L.length<=1) return exportWith(L[0]&&L[0].id,md,fname);
+  const def=(L.find(r=>r.def)||L[0]).id;
+  LM.modal('<h2>📄 Exportar a Word</h2><label for="ew-t">Plantilla con membrete</label><select id="ew-t">'+L.map(r=>'<option value="'+r.id+'"'+(r.id===def?' selected':'')+'>'+E(r.nombre)+(r.def?' (predeterminada)':'')+'</option>').join('')+'<option value="">Genérica (sin membrete de la firma)</option></select><div class="row" style="justify-content:flex-end;margin-top:1rem"><button class="btn" data-close>Cancelar</button><button class="btn primary" id="ew-go">Exportar</button></div>',(m,close)=>{ m.querySelector('#ew-go').onclick=()=>{ const v=m.querySelector('#ew-t').value; close(); exportWith(v,md,fname); }; }); };
+/* ---------- Sección en Configuración ---------- */
+LM.memSection=async function(host){ let L=[]; let err=''; try{ L=await LM.memList(); }catch(e){ err=e.message; }
+  host.innerHTML='<h2>📄 Plantillas con membrete (Word)</h2><p class="small muted">Suba uno o varios documentos .docx de la firma. Se usan al pulsar <b>📄 Exportar a Word</b> en Borradores y en los resultados de IA.</p>'+
+   '<ul class="small"><li>El membrete (logo, nombre, datos) debe estar en el <b>encabezado</b> y/o el <b>pie de página</b> del documento.</li><li>Opcional: escriba <b class="mono">'+MARK+'</b> en el cuerpo, en el lugar donde debe ir el texto. Si no lo tiene, se reemplaza todo el cuerpo y se conservan encabezado, pie, márgenes y estilos.</li><li>Se guardan solo en este navegador (no se incluyen en el respaldo JSON).</li></ul>'+
+   (err?'<p class="small" style="color:#c0392b">'+E(err)+'</p>':'')+
+   '<div class="row"><label class="btn primary" for="mem-up" style="margin:0">⬆ Subir plantilla .docx</label><input type="file" id="mem-up" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple class="hide"></div>'+
+   '<div class="list" style="margin-top:.6rem">'+(L.length?L.map(r=>'<div class="card"><div class="row between"><b>'+E(r.nombre)+'</b>'+(r.def?'<span class="chip ok">Predeterminada</span>':'')+'</div><div class="small muted">'+Math.round(r.size/1024)+' KB · '+LM.fmt(r.creado.slice(0,10))+'</div><div class="row" style="margin-top:.4rem"><button class="btn sm" data-mv="'+r.id+'">👁 Vista previa</button>'+(r.def?'':'<button class="btn sm" data-md="'+r.id+'">★ Predeterminada</button>')+'<button class="btn sm" data-mt="'+r.id+'">⬇ Probar</button><button class="btn sm danger" data-mx="'+r.id+'">🗑 Eliminar</button></div><div class="small" data-mp="'+r.id+'"></div></div>').join(''):'<p class="small muted">Aún no hay plantillas. Mientras tanto se usa una genérica con el nombre de la firma en el encabezado.</p>')+'</div>';
+  const redo=()=>LM.memSection(host);
+  host.querySelector('#mem-up').onchange=async e=>{ const fs=[...e.target.files]; for(const f of fs){ try{ if(!/\.docx$/i.test(f.name)) throw new Error('debe ser .docx'); const buf=await f.arrayBuffer(); await LM.memInfo(buf);
+      await LM.memPut({id:'m'+LM.uid(),nombre:f.name.replace(/\.docx$/i,''),buf,size:f.size,creado:new Date().toISOString(),def:!L.length}); L.push(1); LM.toast('Plantilla «'+f.name+'» guardada ✓'); }catch(er){ LM.toast('No se pudo cargar '+f.name+': '+er.message); } } redo(); };
+  host.querySelectorAll('[data-mv]').forEach(b=>b.onclick=async()=>{ const o=host.querySelector('[data-mp="'+b.dataset.mv+'"]'); o.textContent='Leyendo…'; try{ const r=await LM.memGet(b.dataset.mv); const i=await LM.memInfo(r.buf);
+      o.innerHTML='<div class="card" style="margin-top:.4rem"><div><b>Encabezado:</b> '+(E(i.header)||'<i>sin texto</i>')+(i.imgs?' · 🖼 '+i.imgs+' imagen(es) en encabezado/pie':'')+'</div><div><b>Pie:</b> '+(E(i.footer)||'<i>sin texto</i>')+'</div><div><b>Marcador '+MARK+':</b> '+(i.marker?'sí (el texto irá ahí)':'no (se reemplazará el cuerpo)')+'</div><div class="muted"><b>Cuerpo:</b> '+(E(i.bodyText)||'<i>vacío</i>')+'</div></div>'; }catch(e){ o.textContent='No se pudo leer: '+e.message; } });
+  host.querySelectorAll('[data-md]').forEach(b=>b.onclick=async()=>{ await LM.memSetDefault(b.dataset.md); LM.toast('Plantilla predeterminada ✓'); redo(); });
+  host.querySelectorAll('[data-mt]').forEach(b=>b.onclick=()=>exportWith(b.dataset.mt,'# Documento de prueba\n\nEste texto se insertó en la plantilla. **Negrita**, *cursiva* y una lista:\n\n- Primer punto\n- Segundo punto','Prueba_plantilla'));
+  host.querySelectorAll('[data-mx]').forEach(b=>b.onclick=async()=>{ if(!confirm('¿Eliminar esta plantilla?')) return; const r=await LM.memGet(b.dataset.mx); await LM.memDel(b.dataset.mx); if(r&&r.def){ const rest=await LM.memList(); if(rest[0]) await LM.memSetDefault(rest[0].id); } LM.toast('Plantilla eliminada'); redo(); });
+};
+const origC=V.config; V.config=function(el,args){ origC(el,args); const c=document.createElement('div'); c.className='card'; c.id='cf-mem'; c.style.marginTop='1rem'; const ia=el.querySelector('#cf-ia'); (ia||[...el.querySelectorAll('.card')].pop()).after(c); LM.memSection(c); };
+/* ---------- Botón en Borradores > Plantillas ---------- */
+const origB=V.borradores; V.borradores=function(el,args){ origB(el,args); const d=el.querySelector('#b-doc'); if(!d) return;
+  d.insertAdjacentHTML('beforebegin','<button class="btn primary" id="b-word">📄 Exportar a Word</button>');
+  el.querySelector('#b-word').onclick=()=>{ const p=LM.proc(el.querySelector('#b-p').value); const t=LM.TPL[el.querySelector('#b-t').value]; LM.exportWord(el.querySelector('#b-txt').value,t.n.replace(/\s+/g,'_')+'_'+String(p.radicado).slice(-9)); }; };
 })();
 
 </script>
