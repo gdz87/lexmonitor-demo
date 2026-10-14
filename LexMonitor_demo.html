@@ -92,6 +92,16 @@ svg text{fill:var(--text)}.hide{display:none!important}
 label.row{flex-wrap:nowrap;align-items:flex-start;gap:.6rem}label.row input[type=checkbox]{flex:none;margin-top:1px}
 .row>.ev{padding:2px 8px;border-radius:99px;font-size:.75rem}
 
+/* v2: portal, solicitudes, jurisprudencia, prompts */
+@media(max-width:560px){.hide-sm{display:none}}
+.nb{margin-left:auto;font-size:.68rem;padding:1px 7px}
+.subnav{display:flex;gap:.4rem;flex-wrap:wrap;margin:.4rem 0 .8rem}.subnav a{text-decoration:none}.subnav a.active{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
+.ficha dt{font-weight:700;margin-top:.7rem}.ficha dd{margin:.2rem 0 0;white-space:pre-wrap}.ficha .nc{color:var(--muted);font-style:italic}
+.conf{border-left:4px solid var(--warn);background:color-mix(in srgb,var(--warn) 10%,var(--surface))}
+.sol.nueva{border-left:4px solid var(--danger)}.sol.en_tramite{border-left:4px solid var(--warn)}.sol.respondida{border-left:4px solid var(--ok)}
+.prompt-out{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;min-height:50vh;width:100%}
+.pub-act{border:1px solid var(--border);border-radius:12px;padding:.7rem;margin-bottom:.6rem}.pub-act.on{border-color:var(--ok)}
+
 </style>
 </head>
 <body>
@@ -100,6 +110,7 @@ label.row{flex-wrap:nowrap;align-items:flex-start;gap:.6rem}label.row input[type
   <button class="iconbtn sheet-trigger" id="btnMenu" aria-label="Más módulos">☰</button>
   <div class="brand"><span class="logo" aria-hidden="true">⚖</span><span id="appName">LexMonitor</span></div>
   <span class="sp"></span>
+  <a class="btn sm xlink" href="https://gdz87.github.io/lexmonitor-demo/sitio/" target="_blank" rel="noopener" title="Abre el sitio web de la firma y el portal del cliente (demo)">🌐 <span class="hide-sm">Ver sitio del cliente</span></a>
   <button class="iconbtn" id="btnAlerts" aria-label="Alertas">🔔<span class="badge hide" id="alertBadge">0</span></button>
   <button class="iconbtn" id="btnTheme" aria-label="Cambiar modo claro u oscuro">◐</button>
 </header>
@@ -112,6 +123,97 @@ label.row{flex-wrap:nowrap;align-items:flex-start;gap:.6rem}label.row input[type
 <div class="sheet" id="sheet" role="dialog" aria-label="Todos los módulos"><h2>Módulos</h2><div class="grid-links" id="sheetLinks"></div></div>
 <div class="toast-wrap" id="toasts" aria-live="polite"></div>
 <script>window.LM_SINGLE=true;</script>
+<script>
+/* LexMonitor · Almacén compartido LexMonitor <-> Sitio web / Portal del cliente (DEMO, datos ficticios).
+   Ambos se publican bajo el mismo origen y comparten este almacén en localStorage (y adjuntos en IndexedDB).
+   En producción se reemplaza por un servidor con API y autenticación real (Fase 2).
+
+   Esquema (localStorage['lexportal.v1']):
+   { version:1, updatedAt,
+     firma:     {nombre, abogado, email},
+     clientes:  [{id, nombre, doc, docNorm}]                     // solo clientes con procesos publicados o acceso
+     procesos:  [{id, clienteId, radicado, medio, despacho, estado, etapa, resumenCliente, actualizado}]  // SOLO los marcados "Publicar en portal"
+     publicaciones: [{id, procesoId, fecha, titulo, resumen}]    // SOLO actuaciones publicadas con resumen para el cliente
+     eventos:   [{id, procesoId, fecha, hora, titulo}]           // próximas fechas de procesos publicados
+     accesos:   [{clienteId, docNorm, codigo, creado, activo}]   // generados en LexMonitor > Clientes
+     solicitudes:[{id, fecha, origen:'contacto'|'portal'|'asistente', clienteId, procesoId, nombre, email, tel,
+                   asunto, mensaje, adjuntos:[{id,nombre,size,tipo}], autorizacionDatos:true, estado:'nueva'|'en_tramite'|'respondida',
+                   respuesta, respondidaEn, leidaCliente}] }
+   Regla: LexMonitor escribe clientes/procesos/publicaciones/eventos/firma (proyección); ambos escriben solicitudes; LexMonitor escribe accesos. */
+(function(){
+const KEY='lexportal.v1', CH='lexmonitor-shared';
+const S=window.LexShared={KEY};
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const rel=n=>{const t=new Date();t.setHours(0,0,0,0);t.setDate(t.getDate()+n);return iso(t);};
+S.uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4);
+S.normDoc=s=>String(s||'').replace(/\D/g,'');
+/* Resúmenes para el cliente de los datos de ejemplo (los usa también LexMonitor para marcar lo publicado) */
+S.DEMO_PUB={
+ p1:{resumen:'Demandamos la multa urbanística que le impusieron. El juzgado aceptó estudiar el caso y la entidad ya respondió. Lo siguiente es la audiencia inicial.',
+     acts:{'Auto admite demanda':'El Tribunal aceptó estudiar su demanda (la "admitió"). Es un paso normal del inicio del proceso.',
+           'Contestación de la demanda':'La entidad respondió la demanda y se opone. Lo revisaremos y lo discutiremos en la audiencia.',
+           'Auto fija fecha de audiencia inicial':'El Tribunal fijó la fecha de la primera audiencia. Le contaremos cómo prepararnos.'}},
+ p6:{resumen:'Pedimos que se corrija el cálculo de su pensión. El proceso ya pasó por las etapas principales y está esperando que el juez dicte sentencia.',
+     acts:{'Admite':'El juzgado aceptó estudiar su demanda.','Al despacho para sentencia':'El expediente está en manos del juez para que escriba la sentencia. No requiere acción suya por ahora.'}},
+ p5:{resumen:'La acción de tutela contra la EPS fue negada en primera instancia. Estamos evaluando impugnar (pedir que un juez superior la revise).',
+     acts:{'Fallo niega amparo':'El juez negó la tutela. Estamos revisando la decisión para impugnarla dentro del plazo.'}}
+};
+S.DEMO_ACCESS=[{clienteId:'c2',docNorm:'00000002',doc:'C.C. 00.000.002',codigo:'DEMO-4821'},{clienteId:'c1',docNorm:'9000000010',doc:'NIT 900.000.001-0',codigo:'DEMO-7350'}];
+function seed(){
+  const P=(id,cli,rad,medio,desp,etapa)=>({id,clienteId:cli,radicado:rad,medio,despacho:desp,estado:'Activo',etapa,resumenCliente:S.DEMO_PUB[id].resumen,actualizado:rel(0)});
+  const pubs=[];const add=(pid,d,t)=>pubs.push({id:S.uid(),procesoId:pid,fecha:rel(d),titulo:t,resumen:S.DEMO_PUB[pid].acts[t]});
+  add('p1',-160,'Auto admite demanda');add('p1',-40,'Contestación de la demanda');add('p1',-5,'Auto fija fecha de audiencia inicial');
+  add('p6',-1150,'Admite');add('p6',-260,'Al despacho para sentencia');add('p5',-2,'Fallo niega amparo');
+  return {version:1,updatedAt:new Date().toISOString(),seed:true,
+   firma:{nombre:'Firma de abogados (nombre por definir)',abogado:'Abogado(a) titular',email:'notificaciones@firma-ejemplo.test'},
+   clientes:[{id:'c1',nombre:'Inversiones Alto Ricaurte S.A.S. (ficticio)',doc:'NIT 900.000.001-0',docNorm:'9000000010'},{id:'c2',nombre:'Mariela Toquica Fonseca (ficticia)',doc:'C.C. 00.000.002',docNorm:'00000002'}],
+   procesos:[P('p1','c1','15001233300020250012300','Nulidad y restablecimiento del derecho','Tribunal Administrativo de Boyacá – Sala de Decisión','Contestación de la demanda'),
+     P('p6','c2','15001333300520220011200','Nulidad y restablecimiento del derecho','Juzgado 5.º Administrativo del Circuito de Tunja','Sentencia de primera instancia'),
+     P('p5','c2','15238400300120260021800','Acción de tutela','Juzgado 1.º Civil Municipal de Duitama (tutela)','Fallo de primera instancia')],
+   publicaciones:pubs,
+   eventos:[{id:'e1',procesoId:'p1',fecha:rel(9),hora:'09:00',titulo:'Audiencia inicial (art. 180 CPACA)'}],
+   accesos:S.DEMO_ACCESS.map(a=>({clienteId:a.clienteId,docNorm:a.docNorm,codigo:a.codigo,creado:rel(-3),activo:true})),
+   solicitudes:[{id:'s-demo1',fecha:rel(-2)+'T10:15',origen:'portal',clienteId:'c2',procesoId:'p6',nombre:'Mariela Toquica Fonseca (ficticia)',email:'mariela.t@ejemplo.test',tel:'',asunto:'¿Debo llevar algún documento?',mensaje:'Buenos días, ¿necesitan algún documento adicional para la sentencia? (mensaje ficticio)',adjuntos:[],autorizacionDatos:true,estado:'respondida',respuesta:'Por ahora no se necesita nada. Le avisaremos apenas el juez dicte sentencia. (respuesta ficticia)',respondidaEn:rel(-1)+'T16:40',leidaCliente:true},
+     {id:'s-demo2',fecha:rel(0)+'T08:05',origen:'contacto',clienteId:'',procesoId:'',nombre:'Persona interesada (ficticia)',email:'interesado@ejemplo.test',tel:'300 000 0099',asunto:'Consulta sobre una sanción de tránsito',mensaje:'Me impusieron una sanción y quiero saber si se puede demandar. (mensaje ficticio)',adjuntos:[],autorizacionDatos:true,estado:'nueva',respuesta:'',respondidaEn:''}]};
+}
+S.load=function(){ try{ const s=localStorage.getItem(KEY); if(s){ const d=JSON.parse(s); if(d&&d.version) return d; } }catch(e){} const d=seed(); S.save(d,true); return d; };
+let bc=null; try{ if('BroadcastChannel' in window) bc=new BroadcastChannel(CH); }catch(e){}
+S.save=function(d,silent){ d.updatedAt=new Date().toISOString(); try{ localStorage.setItem(KEY,JSON.stringify(d)); }catch(e){ return false; } if(!silent&&bc) try{ bc.postMessage({t:'changed',at:d.updatedAt}); }catch(e){} return true; };
+S.update=function(fn){ const d=S.load(); const r=fn(d); S.save(d); return r; };
+S.reset=function(){ const d=seed(); S.save(d); return d; };
+const subs=[]; S.onChange=fn=>subs.push(fn);
+const fire=()=>subs.forEach(f=>{ try{ f(S.load()); }catch(e){ console.error(e); } });
+window.addEventListener('storage',e=>{ if(e.key===KEY) fire(); });
+if(bc) bc.onmessage=()=>fire();
+/* Solicitudes */
+S.addSolicitud=function(o){ return S.update(d=>{ const s=Object.assign({id:'s'+S.uid(),fecha:new Date().toISOString().slice(0,16),origen:'contacto',clienteId:'',procesoId:'',nombre:'',email:'',tel:'',asunto:'',mensaje:'',adjuntos:[],autorizacionDatos:false,estado:'nueva',respuesta:'',respondidaEn:''},o); const t=new Date(); s.fecha=iso(t)+'T'+pad(t.getHours())+':'+pad(t.getMinutes()); d.solicitudes.unshift(s); return s; }); };
+S.countNuevas=d=>(d||S.load()).solicitudes.filter(s=>s.estado==='nueva').length;
+/* Acceso al portal */
+S.genCode=()=>{ const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let c=''; for(let i=0;i<6;i++) c+=A[Math.floor(Math.random()*A.length)]; return c.slice(0,3)+'-'+c.slice(3); };
+S.login=function(doc,codigo){ const d=S.load(), n=S.normDoc(doc), c=String(codigo||'').trim().toUpperCase();
+  const a=d.accesos.find(x=>x.activo&&x.docNorm===n&&x.codigo.toUpperCase()===c); if(!a) return null; return d.clientes.find(x=>x.id===a.clienteId)||{id:a.clienteId,nombre:'Cliente'}; };
+/* Proyección desde LexMonitor: solo lo marcado para el portal */
+S.syncFromLex=function(st){ const d=S.load(); const C=st.config||{}; const hoy=iso(new Date());
+  const pubP=st.procesos.filter(p=>p.publicar);
+  const accIds=new Set(d.accesos.map(a=>a.clienteId)); pubP.forEach(p=>accIds.add(p.clienteId));
+  d.firma={nombre:C.firma||'',abogado:C.abogado||'',email:C.email||''};
+  d.clientes=st.clientes.filter(c=>accIds.has(c.id)).map(c=>({id:c.id,nombre:c.nombre,doc:c.doc,docNorm:S.normDoc(c.doc)}));
+  d.accesos.forEach(a=>{ const c=d.clientes.find(x=>x.id===a.clienteId); if(c) a.docNorm=c.docNorm; });
+  d.procesos=pubP.map(p=>({id:p.id,clienteId:p.clienteId,radicado:p.radicado,medio:p.medio,despacho:p.despacho,estado:p.estado,etapa:p.etapa,resumenCliente:p.resumenCliente||'',actualizado:hoy}));
+  d.publicaciones=[]; pubP.forEach(p=>(p.actuaciones||[]).filter(a=>a.publicar&&a.resumenCliente).forEach(a=>d.publicaciones.push({id:a.id,procesoId:p.id,fecha:a.fecha,titulo:a.titulo,resumen:a.resumenCliente})));
+  d.eventos=[]; pubP.forEach(p=>(p.eventos||[]).filter(e=>e.fecha>=hoy&&e.tipo!=='tarea').forEach(e=>d.eventos.push({id:e.id,procesoId:p.id,fecha:e.fecha,hora:e.hora||'',titulo:e.titulo})));
+  delete d.seed; const before=localStorage.getItem(KEY); const tmp=JSON.stringify(Object.assign({},d,{updatedAt:''})); const prev=before?JSON.stringify(Object.assign(JSON.parse(before),{updatedAt:''})):'';
+  if(tmp!==prev) S.save(d); };
+/* Adjuntos: misma base IndexedDB que LexMonitor ('lexmonitor-files') */
+let dbp=null; function db(){ if(dbp) return dbp; dbp=new Promise((res,rej)=>{ if(!window.indexedDB) return rej(new Error('Sin IndexedDB')); const q=indexedDB.open('lexmonitor-files',1); q.onupgradeneeded=()=>q.result.createObjectStore('files'); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); return dbp; }
+const put=async(id,val)=>{ const d=await db(); return new Promise((res,rej)=>{ let t; try{ t=d.transaction('files','readwrite'); t.objectStore('files').put(val,id); }catch(e){ return rej(e); } t.oncomplete=res; t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error||new Error('abort')); }); };
+/* Algunos navegadores (p. ej. Safari en modo privado) no guardan Blob en IndexedDB: se guarda como ArrayBuffer */
+S.filePut=async(id,blob)=>{ try{ await put(id,blob); }catch(e){ const buf=await new Response(blob).arrayBuffer(); await put(id,{buf,type:blob.type||'application/octet-stream'}); } };
+S.fileGet=async id=>{ const d=await db(); return new Promise((res,rej)=>{ const q=d.transaction('files').objectStore('files').get(id); q.onsuccess=()=>{ const r=q.result; res(r&&r.buf?new Blob([r.buf],{type:r.type}):r); }; q.onerror=()=>rej(q.error); }); };
+})();
+
+</script>
 <script>
 /* LexMonitor – utilidades, festivos, términos, radicado y almacenamiento */
 (function(){
@@ -233,7 +335,8 @@ LM.fmtRad = r => { r=String(r||'').replace(/\D/g,''); return r.length===23?[r.sl
 
 /* ---- Almacenamiento: localStorage (datos) + IndexedDB (archivos adjuntos) ---- */
 const KEY='lexmonitor.v1';
-LM.save = function(){ try{ localStorage.setItem(KEY,JSON.stringify(LM.state)); }catch(e){ LM.toast && LM.toast('No se pudo guardar: '+e.message); } };
+LM.save = function(){ try{ localStorage.setItem(KEY,JSON.stringify(LM.state)); }catch(e){ LM.toast && LM.toast('No se pudo guardar: '+e.message); }
+  try{ if(window.LexShared&&LM.state) LexShared.syncFromLex(LM.state); }catch(e){ console.warn('Sincronización con portal: '+e.message); } };
 LM.load = function(){ try{ const s=localStorage.getItem(KEY); return s?JSON.parse(s):null; }catch(e){ return null; } };
 LM.reset = function(){ LM.state = LM.demoData(); LM.save(); };
 let dbp=null;
@@ -242,6 +345,7 @@ function db(){ if(dbp) return dbp; dbp=new Promise((res,rej)=>{ if(!window.index
 LM.filePut = async (id,blob)=>{ const d=await db(); return new Promise((res,rej)=>{ const t=d.transaction('files','readwrite'); t.objectStore('files').put(blob,id); t.oncomplete=res; t.onerror=()=>rej(t.error); }); };
 LM.fileGet = async id=>{ const d=await db(); return new Promise((res,rej)=>{ const q=d.transaction('files').objectStore('files').get(id); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); };
 LM.fileDel = async id=>{ const d=await db(); return new Promise(res=>{ const t=d.transaction('files','readwrite'); t.objectStore('files').delete(id); t.oncomplete=res; }); };
+if(window.LexShared){ LM.filePut=(id,b)=>LexShared.filePut(id,b); LM.fileGet=id=>LexShared.fileGet(id); }
 LM.download = function(name,content,type){ const b=content instanceof Blob?content:new Blob([content],{type:type||'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500); };
 })();
 
@@ -294,21 +398,38 @@ LM.demoData=function(){
     resumen:'Sanción administrativa. Sentencia de primera instancia parcialmente favorable.',
     actuaciones:[A(-640,'radicacion','Radicación',''),A(-600,'providencia','Admite',''),A(-60,'providencia','Sentencia de primera instancia','Accede parcialmente.'),A(-75,'audiencia','Audiencia de alegatos y juzgamiento','Registrada después de la sentencia (posible error de carga).'),A(-50,'memorial','Recurso de apelación','')],
     eventos:[]},
-   {id:'p9',radicado:'15001233300020219999',medio:'Nulidad simple',despacho:'Tribunal Administrativo de Boyacá',ponente:'—',clienteId:'c6',demandante:'Cooperativa Agraria del Valle de Tenza (ficticia)',demandado:'Corporación ficticia ambiental regional',estado:'Activo',etapa:'Admisión',cuantia:0,fechaHecho:D(-400),
-    resumen:'Nulidad de acuerdo ambiental. Radicado cargado incompleto (ejemplo para el asistente).',
+   {id:'p9',radicado:'15001233300020219999',medio:'Nulidad simple',despacho:'',ponente:'—',clienteId:'c6',demandante:'Cooperativa Agraria del Valle de Tenza (ficticia)',demandado:'Corporación ficticia ambiental regional',estado:'Activo',etapa:'Admisión',cuantia:0,fechaHecho:D(-400),
+    resumen:'Nulidad de acuerdo ambiental. Radicado cargado incompleto y sin despacho ni apoderado (ejemplo para el asistente).',
     actuaciones:[A(-45,'radicacion','Radicación','')],eventos:[]},
    {id:'p10',radicado:'11001032500020250031000',medio:'Nulidad y restablecimiento del derecho',despacho:'Consejo de Estado – Sección Segunda',ponente:'Consejero(a) ficticio(a)',clienteId:'c5',demandante:'Hernán Pulido Suesca (ficticio)',demandado:'Entidad nacional ficticia de Servicio Civil',estado:'Terminado',etapa:'Archivo',cuantia:52000000,fechaHecho:D(-1300),
     resumen:'Proceso terminado con sentencia favorable ejecutoriada.',
     actuaciones:[A(-1000,'radicacion','Radicación',''),A(-300,'providencia','Sentencia favorable',''),A(-240,'providencia','Constancia de ejecutoria',''),A(-200,'providencia','Archivo','')],eventos:[]}
   ];
-  procesos.forEach(p=>{p.ficticio=true;p.documentos=[];p.notas='';});
+  const ABOG='Abogado(a) titular';
+  procesos.forEach(p=>{p.ficticio=true;p.documentos=[];p.notas='';p.apoderado=p.id==='p9'?'':ABOG;p.jurisprudencia=[];p.publicar=false;p.resumenCliente='';});
+  /* Publicaciones de ejemplo en el portal del cliente (mismos textos que el almacén compartido) */
+  const PUB=(window.LexShared&&LexShared.DEMO_PUB)||{};
+  Object.keys(PUB).forEach(id=>{ const p=procesos.find(x=>x.id===id); if(!p) return; p.publicar=true; p.resumenCliente=PUB[id].resumen;
+    p.actuaciones.forEach(a=>{ if(PUB[id].acts[a.titulo]){ a.publicar=true; a.resumenCliente=PUB[id].acts[a.titulo]; } }); });
+  /* Fichas de jurisprudencia de ejemplo: TOTALMENTE FICTICIAS (no corresponden a providencias reales) */
+  procesos[0].jurisprudencia=[
+   {id:'j1',corporacion:'Consejo de Estado (EJEMPLO FICTICIO)',sala:'Sala de lo Contencioso Administrativo – Sección Primera',radicado:'00000-00-00-000-0000-00000-00 (ficticio)',fecha:D(-900),ponente:'Consejero(a) ponente ficticio(a) A',
+    hechos:'Un municipio ficticio impuso multa urbanística a una sociedad por obras sin licencia, sin practicar la visita técnica prevista en su propio procedimiento.',
+    problema:'¿Se vulnera el debido proceso cuando la sanción urbanística se impone sin la prueba técnica que el procedimiento exige?',
+    consideraciones:'(Texto de ejemplo) La sala ficticia razona que la potestad sancionatoria exige respetar las etapas del procedimiento y que la ausencia de la prueba técnica impide establecer la infracción.',
+    regla:'(Ejemplo) Sin la prueba técnica exigida por el procedimiento, la sanción carece de soporte y procede su nulidad.',
+    observaciones:'Útil por analogía para el proceso de Inversiones Alto Ricaurte (ficticio): verificar si hubo visita técnica. Ficha de demostración: NO citar.'},
+   {id:'j2',corporacion:'Tribunal Administrativo (EJEMPLO FICTICIO)',sala:'',radicado:'00000-00-00-000-0000-00000-00 (ficticio)',fecha:'',ponente:'',
+    hechos:'Caso ficticio sobre caducidad del medio de control de nulidad y restablecimiento frente a un acto notificado por correo.',
+    problema:'¿Desde cuándo se cuenta la caducidad si la notificación electrónica no tiene acuse de recibo?',
+    consideraciones:'',regla:'',observaciones:'Ficha incompleta a propósito: los campos vacíos se muestran como "No consta en el documento".'}];
   const alertas=[
    {id:'a1',fecha:D(0)+'T07:05',procesoId:'p4',titulo:'Nueva actuación: Auto inadmite demanda',texto:'El despacho inadmitió la demanda y concedió 3 días para corregir.',leida:false,nivel:'alta'},
    {id:'a2',fecha:D(0)+'T07:05',procesoId:'p5',titulo:'Notificación de fallo de tutela',texto:'Fallo niega amparo. Corre término de impugnación.',leida:false,nivel:'alta'},
    {id:'a3',fecha:D(-5)+'T12:00',procesoId:'p1',titulo:'Auto fija fecha de audiencia inicial',texto:'Audiencia inicial programada.',leida:false,nivel:'media'},
    {id:'a4',fecha:D(-40)+'T12:00',procesoId:'p1',titulo:'Contestación de la demanda registrada',texto:'La entidad propuso excepciones.',leida:true,nivel:'baja'}
   ];
-  return {version:1,config:{appName:'LexMonitor',firma:'Firma de abogados (nombre por definir)',abogado:'Abogado(a) titular',tp:'T.P. 000.000 (ficticia)',email:'notificaciones@firma-ejemplo.test',ciudad:'Tunja',theme:'auto',canales:{email:true,whatsapp:true,push:false},horario:{inicio:'07:00',fin:'19:00',frecuencia:3,diasHabiles:true},vacIni:'12-20',vacFin:'01-10',vacSanta:true,inactividadDias:180},
+  return {version:2,config:{appName:'LexMonitor',firma:'Firma de abogados (nombre por definir)',abogado:'Abogado(a) titular',tp:'T.P. 000.000 (ficticia)',email:'notificaciones@firma-ejemplo.test',ciudad:'Tunja',theme:'auto',canales:{email:true,whatsapp:true,push:false},horario:{inicio:'07:00',fin:'19:00',frecuencia:3,diasHabiles:true},vacIni:'12-20',vacFin:'01-10',vacSanta:true,inactividadDias:180},
     clientes,procesos,alertas,simLog:[],createdAt:new Date().toISOString()};
 };
 })();
@@ -322,7 +443,7 @@ LM.$=$; LM.views={};
 LM.NAV=[
  {id:'tablero',ic:'▦',t:'Tablero',main:true},{id:'procesos',ic:'📁',t:'Procesos',main:true},{id:'alertas',ic:'🔔',t:'Alertas SAMAI',main:true},
  {id:'agenda',ic:'📅',t:'Agenda',main:true},{id:'terminos',ic:'⏱',t:'Términos'},{id:'asistente',ic:'🧭',t:'Asistente'},
- {id:'clientes',ic:'👥',t:'Clientes'},{id:'borradores',ic:'📝',t:'Borradores'},{id:'reportes',ic:'📊',t:'Reportes'},
+ {id:'solicitudes',ic:'📨',t:'Solicitudes del portal'},{id:'clientes',ic:'👥',t:'Clientes'},{id:'borradores',ic:'📝',t:'Borradores'},{id:'reportes',ic:'📊',t:'Reportes'},
  {id:'notificaciones',ic:'💬',t:'Canales'},{id:'config',ic:'⚙',t:'Configuración'}
 ];
 LM.toast=function(msg){ const w=$('#toasts'); const d=document.createElement('div'); d.className='toast'; d.textContent=msg; w.appendChild(d); setTimeout(()=>d.remove(),3200); };
@@ -335,7 +456,14 @@ LM.cli=id=>LM.state.clientes.find(c=>c.id===id)||{nombre:'—'};
 LM.allEvents=function(){ const out=[]; LM.state.procesos.forEach(p=>(p.eventos||[]).forEach(e=>out.push(Object.assign({proceso:p},e)))); return out.sort((a,b)=>a.fecha<b.fecha?-1:1); };
 LM.applyTheme=function(){ const t=LM.state.config.theme; const dark=t==='dark'||(t==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches); document.documentElement.dataset.theme=dark?'dark':'light'; };
 LM.refreshChrome=function(){ $('#appName').textContent=LM.state.config.appName||'LexMonitor'; document.title=(LM.state.config.appName||'LexMonitor')+' · Maqueta';
-  const n=LM.state.alertas.filter(a=>!a.leida).length; const b=$('#alertBadge'); b.textContent=n; b.classList.toggle('hide',!n); };
+  const ns=window.LexShared?LexShared.countNuevas():0; const n=LM.state.alertas.filter(a=>!a.leida).length+ns; const b=$('#alertBadge'); b.textContent=n; b.classList.toggle('hide',!n);
+  $('#btnAlerts').setAttribute('aria-label','Alertas ('+n+' sin leer, '+ns+' solicitudes nuevas del portal)');
+  document.querySelectorAll('[data-nav=solicitudes] .nb').forEach(x=>x.remove()); if(ns) document.querySelectorAll('[data-nav=solicitudes]').forEach(a=>a.insertAdjacentHTML('beforeend','<span class="chip danger nb">'+ns+'</span>')); };
+/* Migración de datos guardados por versiones anteriores */
+LM.migrate=function(st){ if((st.version||1)>=2) return st; const PUB=(window.LexShared&&LexShared.DEMO_PUB)||{};
+  st.procesos.forEach(p=>{ if(p.apoderado===undefined) p.apoderado=st.config.abogado||''; p.jurisprudencia=p.jurisprudencia||[]; if(p.publicar===undefined){ const d=PUB[p.id]; p.publicar=!!d; p.resumenCliente=d?d.resumen:''; (p.actuaciones||[]).forEach(a=>{ if(d&&d.acts[a.titulo]){ a.publicar=true; a.resumenCliente=d.acts[a.titulo]; } }); } });
+  const demo=LM.demoData(); st.procesos.forEach(p=>{ if(p.id==='p1'&&!p.jurisprudencia.length){ const dp=demo.procesos.find(x=>x.id==='p1'); p.jurisprudencia=dp.jurisprudencia; } });
+  st.version=2; return st; };
 function buildNav(){
   const link=(n,cls)=>'<a href="#/'+n.id+'" data-nav="'+n.id+'" class="'+(cls||'')+'"><span class="ic" aria-hidden="true">'+n.ic+'</span><span>'+n.t+'</span></a>';
   $('#sidenav').innerHTML=LM.NAV.map(n=>link(n)).join('');
@@ -344,7 +472,7 @@ function buildNav(){
   const open=v=>{$('#sheet').classList.toggle('open',v);$('#sheetBg').classList.toggle('open',v);};
   $('#navMore').onclick=e=>{e.preventDefault();open(true);}; $('#btnMenu').onclick=()=>open(true); $('#sheetBg').onclick=()=>open(false);
   $('#sheetLinks').addEventListener('click',()=>open(false));
-  $('#btnAlerts').onclick=()=>location.hash='#/alertas';
+  $('#btnAlerts').onclick=()=>{ location.hash=(window.LexShared&&LexShared.countNuevas()&&!LM.state.alertas.some(a=>!a.leida))?'#/solicitudes':'#/alertas'; };
   $('#btnTheme').onclick=()=>{ const cur=document.documentElement.dataset.theme; LM.state.config.theme=cur==='dark'?'light':'dark'; LM.save(); LM.applyTheme(); LM.toast('Modo '+(LM.state.config.theme==='dark'?'oscuro':'claro')+' activado'); };
 }
 LM.route=function(){
@@ -355,7 +483,9 @@ LM.route=function(){
   LM.refreshChrome(); window.scrollTo(0,0);
 };
 LM.boot=function(){
-  LM.state=LM.load()||LM.demoData(); if(!LM.state.config) LM.state=LM.demoData(); LM.save();
+  LM.state=LM.load()||LM.demoData(); if(!LM.state.config) LM.state=LM.demoData(); LM.migrate(LM.state); LM.save();
+  if(window.LexShared) LexShared.onChange(()=>{ LM.refreshChrome(); const h=location.hash; const typing=document.activeElement&&/TEXTAREA|INPUT|SELECT/.test(document.activeElement.tagName);
+    if(!document.querySelector('.modal-bg')&&!typing&&(/^#\/(solicitudes|tablero)?$/.test(h)||h==='')) LM.route(); else if(/^#\/solicitudes/.test(h)) LM.toast('📨 Hay cambios en las solicitudes del portal'); });
   LM.applyTheme(); buildNav(); window.addEventListener('hashchange',LM.route); LM.route();
   if(LM.startScheduler) LM.startScheduler();
   if('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.LM_SINGLE){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
@@ -390,7 +520,7 @@ V.tablero=function(el){
   S.procesos.forEach(p=>p.actuaciones.forEach(a=>{ const m=months.find(x=>x.key===a.fecha.slice(0,7)); if(m) m.v++; }));
   el.innerHTML='<div class="row between"><div><h1>'+(new Date().getHours()<12?'Buenos días':new Date().getHours()<19?'Buenas tardes':'Buenas noches')+' 👋</h1><p class="muted small">'+LM.fmtLong(hoy)+' · '+E(S.config.firma)+'</p></div><div class="row no-print"><a class="btn primary" href="#/procesos/nuevo">＋ Nuevo proceso</a><button class="btn" id="simNow">⟳ Consultar SAMAI (simulado)</button></div></div>'+
   '<div class="grid g4" style="margin-top:.5rem">'+
-   kpi(act.length,'Procesos activos','#/procesos')+kpi(vHoy.length,'Términos que vencen hoy','#/agenda',vHoy.length?'danger':'')+kpi(vSem.length,'Eventos próximos 7 días','#/agenda',vSem.length?'warn':'')+kpi(nuevas.length,'Alertas nuevas','#/alertas',nuevas.length?'info':'')+'</div>'+
+   kpi(act.length,'Procesos activos','#/procesos')+kpi(vHoy.length,'Términos que vencen hoy','#/agenda',vHoy.length?'danger':'')+kpi(vSem.length,'Eventos próximos 7 días','#/agenda',vSem.length?'warn':'')+kpi(nuevas.length,'Alertas nuevas','#/alertas',nuevas.length?'info':'')+'</div>'+(function(){ const sn=window.LexShared?LexShared.countNuevas():0; return '<a class="card item row between" id="kpiSol" href="#/solicitudes" style="margin-top:1rem"><span>📨 <b>Solicitudes del portal</b> <span class="small muted">(sitio web y portal del cliente)</span></span><span class="chip '+(sn?'danger':'ok')+'" style="font-size:.9rem">'+sn+' nueva'+(sn===1?'':'s')+'</span></a>'; })()+
   '<div class="grid g3" style="margin-top:1rem">'+
    '<div class="card"><h2>Próximos vencimientos y audiencias</h2><div class="list">'+(vSem.concat(ev.filter(e=>e.fecha>sem)).slice(0,6).map(e=>{ const d=LM.diffDays(hoy,e.fecha); return '<a class="item" href="#/proceso/'+e.proceso.id+'"><div class="row between"><b>'+E(e.titulo)+'</b><span class="chip '+(e.tipo==='audiencia'?'info':d<=2?'danger':'warn')+'">'+(d===0?'Hoy':d<0?'Vencido':'En '+d+' d')+'</span></div><div class="small muted">'+LM.fmt(e.fecha)+(e.hora?' · '+e.hora:'')+' · '+E(e.proceso.medio)+'</div></a>'; }).join('')||'<p class="muted">Sin eventos.</p>')+'</div></div>'+
    '<div class="card"><h2>Procesos por medio de control</h2>'+donut(Object.entries(byMedio).map(([k,v])=>({k,v})))+'</div>'+
@@ -419,14 +549,14 @@ LM.radPartsHtml=function(r){ if(!r.parts) return ''; const L=r.labels,P=r.parts;
   return '<div class="rad-parts">'+f('depto','Departamento')+f('municipio','Municipio')+f('entidad','Entidad')+f('especialidad','Especialidad')+f('despacho','Despacho')+f('anio','Año')+f('consecutivo','Consecutivo')+f('instancia','Instancia')+'</div>'; };
 
 LM.procesoForm=function(p){
-  const S=LM.state, isNew=!p; p=p||{radicado:'',medio:'Nulidad y restablecimiento del derecho',despacho:'',ponente:'',clienteId:S.clientes[0].id,demandante:'',demandado:'',estado:'Activo',etapa:'Radicación',cuantia:0,fechaHecho:'',resumen:''};
+  const S=LM.state, isNew=!p; p=p||{apoderado:S.config.abogado||'',radicado:'',medio:'Nulidad y restablecimiento del derecho',despacho:'',ponente:'',clienteId:S.clientes[0].id,demandante:'',demandado:'',estado:'Activo',etapa:'Radicación',cuantia:0,fechaHecho:'',resumen:''};
   const medios=['Nulidad y restablecimiento del derecho','Nulidad simple','Reparación directa','Controversias contractuales','Nulidad electoral','Acción de tutela','Acción popular','Repetición','Ejecutivo'];
   LM.modal('<h2>'+(isNew?'Nuevo proceso':'Editar proceso')+'</h2><form id="pf" novalidate>'+
    '<label for="f-rad">Radicado (23 dígitos)</label><input id="f-rad" inputmode="numeric" autocomplete="off" value="'+E(p.radicado)+'" placeholder="15001-23-33-000-2026-00001-00"><div id="radMsg" class="small" aria-live="polite"></div><div id="radParts" style="margin-top:.4rem"></div>'+
    '<div class="grid g2"><div><label for="f-medio">Medio de control</label><select id="f-medio">'+medios.map(m=>'<option'+(m===p.medio?' selected':'')+'>'+m+'</option>').join('')+'</select></div>'+
    '<div><label for="f-cli">Cliente</label><select id="f-cli">'+S.clientes.map(c=>'<option value="'+c.id+'"'+(c.id===p.clienteId?' selected':'')+'>'+E(c.nombre)+'</option>').join('')+'</select></div>'+
    '<div><label for="f-dte">Demandante</label><input id="f-dte" value="'+E(p.demandante)+'" required></div><div><label for="f-ddo">Demandado</label><input id="f-ddo" value="'+E(p.demandado)+'" required></div>'+
-   '<div><label for="f-desp">Despacho</label><input id="f-desp" value="'+E(p.despacho)+'" placeholder="Se sugiere a partir del radicado"></div><div><label for="f-pon">Ponente / juez</label><input id="f-pon" value="'+E(p.ponente)+'"></div>'+
+   '<div><label for="f-desp">Despacho</label><input id="f-desp" value="'+E(p.despacho)+'" placeholder="Se sugiere a partir del radicado"></div><div><label for="f-pon">Ponente / juez</label><input id="f-pon" value="'+E(p.ponente)+'"></div><div><label for="f-apo">Apoderado(a)</label><input id="f-apo" value="'+E(p.apoderado||'')+'"></div><div><label for="f-pres">Fecha de presentación / notificación (opcional)</label><input id="f-pres" type="date" value="'+E(p.fechaPresentacion||'')+'"></div>'+
    '<div><label for="f-est">Estado</label><select id="f-est">'+['Activo','Pre-demanda','Suspendido','Terminado'].map(x=>'<option'+(x===p.estado?' selected':'')+'>'+x+'</option>').join('')+'</select></div><div><label for="f-eta">Etapa</label><input id="f-eta" value="'+E(p.etapa)+'"></div>'+
    '<div><label for="f-cua">Cuantía (COP)</label><input id="f-cua" type="number" min="0" value="'+(p.cuantia||0)+'"></div><div><label for="f-hecho">Fecha del hecho / acto (para caducidad)</label><input id="f-hecho" type="date" value="'+E(p.fechaHecho)+'"></div></div>'+
    '<label for="f-res">Resumen</label><textarea id="f-res">'+E(p.resumen)+'</textarea><p id="fErr" class="err"></p>'+
@@ -442,8 +572,8 @@ LM.procesoForm=function(p){
       if(!r.ok){ err.textContent='Corrija el radicado antes de guardar.'; rad.focus(); return; }
       if(S.procesos.some(x=>x.radicado===r.clean&&x!==p)){ err.textContent='Ya existe un proceso con ese radicado.'; return; }
       const dte=m.querySelector('#f-dte').value.trim(), ddo=m.querySelector('#f-ddo').value.trim(); if(!dte||!ddo){ err.textContent='Demandante y demandado son obligatorios.'; return; }
-      Object.assign(p,{radicado:r.clean,medio:m.querySelector('#f-medio').value,clienteId:m.querySelector('#f-cli').value,demandante:dte,demandado:ddo,despacho:m.querySelector('#f-desp').value,ponente:m.querySelector('#f-pon').value,estado:m.querySelector('#f-est').value,etapa:m.querySelector('#f-eta').value,cuantia:+m.querySelector('#f-cua').value||0,fechaHecho:m.querySelector('#f-hecho').value,resumen:m.querySelector('#f-res').value});
-      if(isNew){ p.id='p'+LM.uid(); p.actuaciones=[{id:LM.uid(),fecha:LM.iso(LM.today()),tipo:'radicacion',titulo:'Proceso registrado en '+S.config.appName,detalle:'Alta manual.',fuente:'Usuario'}]; p.eventos=[]; p.documentos=[]; p.notas=''; S.procesos.unshift(p); }
+      Object.assign(p,{radicado:r.clean,medio:m.querySelector('#f-medio').value,clienteId:m.querySelector('#f-cli').value,demandante:dte,demandado:ddo,despacho:m.querySelector('#f-desp').value,ponente:m.querySelector('#f-pon').value,apoderado:m.querySelector('#f-apo').value.trim(),fechaPresentacion:m.querySelector('#f-pres').value,estado:m.querySelector('#f-est').value,etapa:m.querySelector('#f-eta').value,cuantia:+m.querySelector('#f-cua').value||0,fechaHecho:m.querySelector('#f-hecho').value,resumen:m.querySelector('#f-res').value});
+      if(isNew){ p.id='p'+LM.uid(); p.actuaciones=[{id:LM.uid(),fecha:LM.iso(LM.today()),tipo:'radicacion',titulo:'Proceso registrado en '+S.config.appName,detalle:'Alta manual.',fuente:'Usuario'}]; p.eventos=[]; p.documentos=[]; p.notas=''; p.jurisprudencia=[]; p.publicar=false; p.resumenCliente=''; S.procesos.unshift(p); }
       LM.save(); close(); LM.toast(isNew?'Proceso creado ✓':'Cambios guardados ✓'); location.hash='#/proceso/'+p.id; LM.route(); };
   });
   if(isNew&&location.hash.indexOf('nuevo')>=0){ history.replaceState(null,'','#/procesos'); LM.views.procesos(LM.$('#view'),[]); }
@@ -455,7 +585,7 @@ V.proceso=function(el,args){
   const tab=args[1]||'linea'; const r=LM.parseRadicado(p.radicado); const c=LM.cli(p.clienteId);
   el.innerHTML='<a href="#/procesos" class="small no-print">← Procesos</a><div class="row between" style="margin-top:.3rem"><div><div class="mono">'+LM.fmtRad(p.radicado)+' <span class="chip warn">ficticio</span></div><h1 style="margin-top:.3rem">'+E(p.medio)+'</h1><div class="muted small">'+E(p.despacho)+' · '+E(p.ponente)+'</div></div><div class="row no-print">'+LM.estadoChip(p)+'<button class="btn sm" id="edit">✎ Editar</button><a class="btn sm" href="#/reportes/'+p.id+'">📄 Informe</a><a class="btn sm" href="#/borradores/'+p.id+'">📝 Borrador</a></div></div>'+
    '<div class="grid g3" style="margin:.8rem 0"><div class="card small"><b>Demandante</b><br>'+E(p.demandante)+'</div><div class="card small"><b>Demandado</b><br>'+E(p.demandado)+'</div><div class="card small"><b>Cliente</b><br><a href="#/clientes/'+c.id+'">'+E(c.nombre)+'</a><br><span class="muted">Etapa: '+E(p.etapa)+(p.cuantia?' · Cuantía '+LM.money(p.cuantia):'')+'</span></div></div>'+
-   '<div class="tabs" role="tablist">'+[['linea','Línea de tiempo'],['agenda','Términos y agenda'],['docs','Documentos'],['radicado','Radicado'],['notas','Notas']].map(([k,t])=>'<button role="tab" data-tab="'+k+'" class="'+(k===tab?'active':'')+'">'+t+'</button>').join('')+'</div><div id="tabc"></div>';
+   '<div class="tabs" role="tablist">'+[['linea','Línea de tiempo'],['agenda','Términos y agenda'],['docs','Documentos'],['radicado','Radicado'],['juris','Jurisprudencia'],['portal','Portal del cliente'],['notas','Notas']].map(([k,t])=>'<button role="tab" data-tab="'+k+'" class="'+(k===tab?'active':'')+'">'+t+'</button>').join('')+'</div><div id="tabc"></div>';
   el.querySelector('#edit').onclick=()=>LM.procesoForm(p);
   el.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{ history.replaceState(null,'','#/proceso/'+p.id+'/'+b.dataset.tab); V.proceso(el,[p.id,b.dataset.tab]); });
   const tc=el.querySelector('#tabc');
@@ -463,7 +593,7 @@ V.proceso=function(el,args){
     const acts=p.actuaciones.slice().sort((a,b)=>a.fecha<b.fecha?1:-1);
     tc.innerHTML='<div class="row between"><div class="tl-filter" id="tlf"><button class="btn sm" data-f="">Todas</button>'+Object.entries(TIPOS).map(([k,t])=>'<button class="btn sm" data-f="'+k+'">'+t+'</button>').join('')+'</div><button class="btn sm primary" id="addAct">＋ Actuación</button></div>'+
      '<div class="card" style="margin-top:.8rem"><div class="small muted">Vista cronológica (deslice →; toque un punto)</div><div class="htl">'+acts.slice().reverse().map(a=>'<div class="h" data-go="'+a.id+'" title="'+E(a.titulo)+'"><i style="background:'+({audiencia:'#7a4bd8',providencia:'#1b7f4b',notificacion:'#a35d00'}[a.tipo]||'#2f6fe0')+'"></i>'+LM.fmt(a.fecha)+'<br><b>'+E(a.titulo.slice(0,28))+'</b></div>').join('')+'</div></div>'+
-     '<div class="timeline" id="tl">'+acts.map(a=>'<div class="tl-item k-'+a.tipo+'" id="act-'+a.id+'" data-tipo="'+a.tipo+'" tabindex="0"><span class="tl-dot"></span><div class="tl-body"><div class="row between"><b>'+E(a.titulo)+'</b><span class="chip">'+TIPOS[a.tipo]+'</span></div><div class="small muted">'+LM.fmtLong(a.fecha)+' · '+E(a.fuente||'')+'</div><div class="tl-detail small">'+(E(a.detalle)||'<i class="muted">Sin detalle</i>')+'<div class="row" style="margin-top:.4rem"><button class="btn sm" data-term="'+a.fecha+'">⏱ Calcular término desde aquí</button><button class="btn sm danger" data-del="'+a.id+'">Eliminar</button></div></div></div></div>').join('')+'</div>';
+     '<div class="timeline" id="tl">'+acts.map(a=>'<div class="tl-item k-'+a.tipo+'" id="act-'+a.id+'" data-tipo="'+a.tipo+'" tabindex="0"><span class="tl-dot"></span><div class="tl-body"><div class="row between"><b>'+E(a.titulo)+'</b><span class="row" style="gap:.3rem">'+(p.publicar&&a.publicar?'<span class="chip ok" title="Visible en el portal del cliente">🌐 Portal</span>':'')+'<span class="chip">'+TIPOS[a.tipo]+'</span></span></div><div class="small muted">'+LM.fmtLong(a.fecha)+' · '+E(a.fuente||'')+'</div><div class="tl-detail small">'+(E(a.detalle)||'<i class="muted">Sin detalle</i>')+'<div class="row" style="margin-top:.4rem"><button class="btn sm" data-term="'+a.fecha+'">⏱ Calcular término desde aquí</button><button class="btn sm danger" data-del="'+a.id+'">Eliminar</button></div></div></div></div>').join('')+'</div>';
     tc.querySelectorAll('.tl-item').forEach(i=>{ const t=()=>i.classList.toggle('open'); i.addEventListener('click',e=>{ if(!e.target.closest('button')) t(); }); i.addEventListener('keydown',e=>{ if(e.key==='Enter') t(); }); });
     tc.querySelectorAll('[data-go]').forEach(h=>h.onclick=()=>{ const t=tc.querySelector('#act-'+h.dataset.go); t.classList.add('open'); t.scrollIntoView({behavior:'smooth',block:'center'}); });
     tc.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>tc.querySelectorAll('.tl-item').forEach(i=>i.classList.toggle('hide',!!b.dataset.f&&i.dataset.tipo!==b.dataset.f)));
@@ -487,6 +617,8 @@ V.proceso=function(el,args){
     tc.querySelector('#up').onchange=async e=>{ for(const f of e.target.files){ const id='f'+LM.uid(); try{ await LM.filePut(id,f); p.documentos.push({id,nombre:f.name,size:f.size,tipo:f.type,fecha:LM.iso(LM.today())}); }catch(err){ LM.toast('Error guardando '+f.name); } } LM.save(); LM.toast('Documento(s) adjuntado(s) ✓'); e.target.value=''; draw(); }; draw();
   }
   if(tab==='radicado'){ tc.innerHTML='<div class="card"><h2>Descomposición del radicado</h2>'+(r.ok?'<p class="okt">✓ Estructura válida</p>':'<p class="err">'+r.errors.map(E).join('<br>')+'</p>')+LM.radPartsHtml(r)+'<p class="small muted" style="margin-top:.8rem">Estructura de 23 dígitos: departamento (2) + municipio (3) + entidad (2) + especialidad (2) + despacho (3) + año (4) + consecutivo (5) + instancia (2). Catálogo de códigos parcial en la maqueta.</p></div>'; }
+  if(tab==='juris') LM.jurisTab(tc,p,()=>V.proceso(el,[p.id,'juris']));
+  if(tab==='portal') LM.portalTab(tc,p,()=>V.proceso(el,[p.id,'portal']));
   if(tab==='notas'){ tc.innerHTML='<div class="card"><label for="nt">Notas internas del proceso</label><textarea id="nt" style="min-height:200px">'+E(p.notas||'')+'</textarea><button class="btn primary" id="sv" style="margin-top:.6rem">Guardar notas</button></div>'; tc.querySelector('#sv').onclick=()=>{ p.notas=tc.querySelector('#nt').value; LM.save(); LM.toast('Notas guardadas ✓'); }; }
 };
 LM.eventForm=function(p,done,pre){ pre=pre||{}; const S=LM.state;
@@ -497,7 +629,7 @@ LM.eventForm=function(p,done,pre){ pre=pre||{}; const S=LM.state;
 V.clientes=function(el,args){
   const S=LM.state;
   if(args[0]){ const c=LM.cli(args[0]); const ps=S.procesos.filter(p=>p.clienteId===c.id);
-    el.innerHTML='<a href="#/clientes" class="small">← Clientes</a><h1 style="margin-top:.4rem">'+E(c.nombre)+'</h1><div class="card small"><div class="grid g3"><div><b>Tipo</b><br>'+E(c.tipo)+'</div><div><b>Documento</b><br>'+E(c.doc)+'</div><div><b>Contacto</b><br>'+E(c.email)+'<br>'+E(c.tel)+' · '+E(c.ciudad)+'</div></div></div><h2 style="margin-top:1rem">Procesos ('+ps.length+')</h2><div class="list">'+ps.map(p=>'<a class="item" href="#/proceso/'+p.id+'"><div class="row between"><span class="mono">'+LM.fmtRad(p.radicado)+'</span>'+LM.estadoChip(p)+'</div><b>'+E(p.medio)+'</b> vs. '+E(p.demandado)+'<div class="small muted">'+E(p.etapa)+'</div></a>').join('')+'</div>'; return; }
+    el.innerHTML='<a href="#/clientes" class="small">← Clientes</a><h1 style="margin-top:.4rem">'+E(c.nombre)+'</h1><div class="card small"><div class="grid g3"><div><b>Tipo</b><br>'+E(c.tipo)+'</div><div><b>Documento</b><br>'+E(c.doc)+'</div><div><b>Contacto</b><br>'+E(c.email)+'<br>'+E(c.tel)+' · '+E(c.ciudad)+'</div></div></div>'+LM.accesoCard(c)+'<h2 style="margin-top:1rem">Procesos ('+ps.length+')</h2><div class="list">'+ps.map(p=>'<a class="item" href="#/proceso/'+p.id+'"><div class="row between"><span class="mono">'+LM.fmtRad(p.radicado)+'</span>'+LM.estadoChip(p)+'</div><b>'+E(p.medio)+'</b> vs. '+E(p.demandado)+'<div class="small muted">'+E(p.etapa)+'</div></a>').join('')+'</div>'; LM.accesoBind(el,c,()=>V.clientes(el,args)); return; }
   el.innerHTML='<div class="row between"><h1>Clientes</h1><button class="btn primary" id="nc">＋ Nuevo cliente</button></div><div class="grid g3" style="margin-top:.6rem">'+S.clientes.map(c=>{ const ps=S.procesos.filter(p=>p.clienteId===c.id); return '<a class="card item" href="#/clientes/'+c.id+'"><b>'+E(c.nombre)+'</b><div class="small muted">'+E(c.tipo)+' · '+E(c.ciudad)+'</div><div class="row" style="margin-top:.5rem"><span class="chip info">'+ps.length+' procesos</span><span class="chip ok">'+ps.filter(p=>p.estado==='Activo').length+' activos</span></div></a>'; }).join('')+'</div>';
   el.querySelector('#nc').onclick=()=>LM.modal('<h2>Nuevo cliente</h2><form id="cf"><label for="c-n">Nombre o razón social</label><input id="c-n" required><div class="grid g2"><div><label for="c-t">Tipo</label><select id="c-t"><option>Persona natural</option><option>Persona jurídica</option><option>Consorcio</option><option>Entidad pública</option></select></div><div><label for="c-d">Documento</label><input id="c-d"></div><div><label for="c-e">Correo</label><input id="c-e" type="email"></div><div><label for="c-te">Teléfono / WhatsApp</label><input id="c-te"></div></div><label for="c-c">Ciudad</label><input id="c-c"><div class="row" style="justify-content:flex-end;margin-top:.8rem"><button type="button" class="btn" data-close>Cancelar</button><button class="btn primary">Guardar</button></div></form>',(m,close)=>{
     m.querySelector('#cf').onsubmit=e=>{ e.preventDefault(); const n=m.querySelector('#c-n').value.trim(); if(!n) return LM.toast('Escriba el nombre'); S.clientes.push({id:'c'+LM.uid(),nombre:n,tipo:m.querySelector('#c-t').value,doc:m.querySelector('#c-d').value,email:m.querySelector('#c-e').value,tel:m.querySelector('#c-te').value,ciudad:m.querySelector('#c-c').value}); LM.save(); close(); LM.toast('Cliente creado ✓'); V.clientes(el,[]); }; });
@@ -592,12 +724,19 @@ LM.runAssistant=function(){
     const ad=chron.find(a=>/admite|admisi/i.test(a.titulo)), rad=chron.find(a=>a.tipo==='radicacion');
     const sen=chron.find(a=>/^sentencia/i.test(a.titulo)), alg=chron.find(a=>/alegatos|juzgamiento/i.test(a.titulo));
     if((ad&&rad&&ad.fecha<rad.fecha)||(sen&&alg&&alg.fecha>sen.fecha)) add(p,'media','Actuaciones fuera de orden','Actuaciones fuera de orden lógico',(sen&&alg&&alg.fecha>sen.fecha)?'La "'+alg.titulo+'" ('+LM.fmt(alg.fecha)+') figura después de la sentencia ('+LM.fmt(sen.fecha)+').':'La admisión aparece antes de la radicación.','Revise las fechas cargadas; puede ser un error de digitación.');
+    /* Regla: datos faltantes (no se suponen valores) */
+    const falt=[]; const cl=S.clientes.find(c=>c.id===p.clienteId);
+    if(!cl) falt.push('cliente'); if(!String(p.despacho||'').trim()||/^[—-]$/.test(String(p.despacho).trim())) falt.push('despacho');
+    if(!String(p.medio||'').trim()) falt.push('medio de control');
+    if(p.estado!=='Pre-demanda'&&!p.fechaPresentacion&&!acts.some(a=>a.tipo==='radicacion'||a.tipo==='notificacion')) falt.push('fecha de presentación o notificación');
+    if(!String(p.apoderado||'').trim()) falt.push('apoderado');
+    if(falt.length) add(p,falt.length>1||falt.includes('fecha de presentación o notificación')?'alta':'media','Datos faltantes','Datos faltantes: '+falt.join(', '),'El proceso no tiene registrado: '+falt.join(', ')+'. El sistema no supone ni rellena estos valores; sin ellos no es confiable calcular términos ni generar escritos.','Complete los datos desde "Editar" en la ficha del proceso, verificándolos en el expediente.');
     (p.eventos||[]).filter(e=>e.tipo==='audiencia'&&!e.preparada&&e.fecha>=hoy&&LM.diffDays(hoy,e.fecha)<=14).forEach(e=>add(p,LM.diffDays(hoy,e.fecha)<=7?'alta':'media','Audiencia sin preparación','Audiencia en '+LM.diffDays(hoy,e.fecha)+' días sin preparar: '+e.titulo,'Programada para el '+LM.fmtLong(e.fecha)+(e.hora?' a las '+e.hora:'')+'; no está marcada como preparada.','Prepare la teoría del caso, pruebas y poder; márquela como preparada en la ficha.','#/proceso/'+p.id+'/agenda'));
   });
   const o={alta:0,media:1,baja:2}; return out.sort((a,b)=>o[a.nivel]-o[b.nivel]);
 };
 V.asistente=function(el){ const h=LM.runAssistant(); const reglas=[...new Set(h.map(x=>x.regla))];
-  el.innerHTML='<h1>🧭 Asistente de revisión</h1><p class="small muted">Revisa la cartera con reglas explícitas (no es inteligencia artificial generativa): términos vencidos sin actuación, inactividad prolongada (> '+LM.state.config.inactividadDias+' días), caducidad en riesgo, radicado mal formado, actuaciones fuera de orden y audiencias sin preparación.</p><div class="row" style="margin:.5rem 0"><span class="chip danger">'+h.filter(x=>x.nivel==='alta').length+' alta</span><span class="chip warn">'+h.filter(x=>x.nivel==='media').length+' media</span>'+reglas.map(r=>'<span class="chip">'+E(r)+'</span>').join('')+'</div><div class="list">'+
+  el.innerHTML='<h1>🧭 Asistente de revisión</h1><p class="small muted">Revisa la cartera con reglas explícitas (no es inteligencia artificial generativa): términos vencidos sin actuación, inactividad prolongada (> '+LM.state.config.inactividadDias+' días), caducidad en riesgo, radicado mal formado, actuaciones fuera de orden, audiencias sin preparación y datos faltantes (cliente, despacho, medio de control, fecha de presentación/notificación, apoderado).</p><div class="row" style="margin:.5rem 0"><span class="chip danger">'+h.filter(x=>x.nivel==='alta').length+' alta</span><span class="chip warn">'+h.filter(x=>x.nivel==='media').length+' media</span>'+reglas.map(r=>'<span class="chip">'+E(r)+'</span>').join('')+'</div><div class="list">'+
    h.map(x=>'<div class="card assist '+x.nivel+'"><div class="row between"><b>'+E(x.titulo)+'</b><span class="chip '+(x.nivel==='alta'?'danger':'warn')+'">'+x.nivel+'</span></div><div class="small muted mono">'+LM.fmtRad(x.p.radicado)+' · '+E(x.p.medio)+'</div><p class="small"><b>Por qué:</b> '+E(x.expl)+'<br><b>Sugerencia:</b> '+E(x.sug)+'</p><a class="btn sm primary" href="'+x.link+'">Atender</a></div>').join('')+(h.length?'':'<p class="okt">Sin inconsistencias. 👍</p>')+'</div>'; };
 
 /* ---- Agenda mensual ---- */
@@ -742,6 +881,135 @@ V.config=function(el){ const S=LM.state, C=S.config;
   el.querySelector('#imp').onchange=e=>{ const file=e.target.files[0]; if(!file) return; const rd=new FileReader(); rd.onload=()=>{ try{ const d=JSON.parse(rd.result); if(!d.procesos||!d.config) throw new Error('Estructura no reconocida'); LM.state=d; LM.save(); LM.applyTheme(); LM.toast('Datos importados ✓'); LM.route(); }catch(err){ LM.toast('No se pudo importar: '+err.message); } }; rd.readAsText(file); };
   el.querySelector('#rst').onclick=()=>{ if(!confirm('¿Reemplazar todos los datos por la demostración?')) return; LM.reset(); LM.applyTheme(); LM.toast('Datos de demostración restaurados'); LM.route(); };
 };
+})();
+
+</script>
+<script>
+/* Módulos v2: Fichas de jurisprudencia, Biblioteca de instrucciones para IA, Portal del cliente (publicación y accesos), Solicitudes del portal */
+(function(){
+const LM=window.LM, V=LM.views, E=LM.esc, SH=window.LexShared;
+const NC='No consta en el documento';
+LM.sitioURL=window.LM_SINGLE?'https://gdz87.github.io/lexmonitor-demo/sitio/':'sitio/';
+/* ================= FICHAS DE JURISPRUDENCIA ================= */
+const JF=[['hechos','Hechos'],['problema','Problema jurídico'],['consideraciones','Consideraciones'],['regla','Conclusión / regla'],['observaciones','Observaciones / relevancia para el caso']];
+const JID=[['corporacion','Corporación'],['sala','Sala / sección'],['radicado','Radicado'],['fecha','Fecha'],['ponente','Ponente']];
+const v=x=>String(x||'').trim();
+LM.fichaHtml=function(j,p){ const val=(k)=>{ const t=v(j[k]); return t?(k==='fecha'?LM.fmtLong(t):E(t)):'<span class="nc">'+NC+'</span>'; };
+  return '<div class="ficha"><h3>Ficha de jurisprudencia</h3>'+(p?'<p class="small muted">Proceso: '+LM.fmtRad(p.radicado)+' · '+E(p.medio)+'</p>':'')+
+   '<table><tbody>'+JID.map(([k,t])=>'<tr><th style="width:32%">'+t+'</th><td>'+val(k)+'</td></tr>').join('')+'</tbody></table><dl>'+JF.map(([k,t])=>'<dt>'+t+'</dt><dd>'+val(k)+'</dd>').join('')+'</dl></div>'; };
+LM.fichaDoc=function(list,p){ const body=list.map(j=>LM.fichaHtml(j,p).replace(/class="nc"/g,'style="color:#666;font-style:italic"')).join('<br style="page-break-before:always">');
+  return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>Fichas de jurisprudencia</title><style>body{font-family:Times New Roman;font-size:12pt}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:4px;text-align:left;vertical-align:top}dt{font-weight:bold;margin-top:10pt}dd{margin:0 0 0 0}</style></head><body><p style="color:#a35d00;font-size:9pt">Documento de demostración. Verifique cada ficha contra la providencia original antes de citarla.</p>'+body+'</body></html>'; };
+LM.jurisForm=function(p,j,done){ const isNew=!j; j=j||{id:'j'+LM.uid()};
+  const inp=(k,t,type)=>'<div><label for="j-'+k+'">'+t+'</label><input id="j-'+k+'" type="'+(type||'text')+'" value="'+E(j[k]||'')+'"></div>';
+  LM.modal('<h2>'+(isNew?'Nueva':'Editar')+' ficha de jurisprudencia</h2><p class="small muted">Copie solo lo que diga la providencia. Lo que deje vacío se mostrará como «'+NC+'».</p><form id="jf"><h3>Identificación</h3><div class="grid g2">'+inp('corporacion','Corporación')+inp('sala','Sala / sección')+inp('radicado','Radicado')+inp('fecha','Fecha','date')+inp('ponente','Ponente')+'</div>'+
+   JF.map(([k,t])=>'<label for="j-'+k+'">'+t+'</label><textarea id="j-'+k+'">'+E(j[k]||'')+'</textarea>').join('')+
+   '<div class="row" style="justify-content:flex-end;margin-top:.8rem"><button type="button" class="btn" data-close>Cancelar</button><button class="btn primary">Guardar ficha</button></div></form>',(m,close)=>{
+   m.querySelector('#jf').onsubmit=e=>{ e.preventDefault(); JID.concat(JF).forEach(([k])=>j[k]=m.querySelector('#j-'+k).value.trim()); p.jurisprudencia=p.jurisprudencia||[]; if(isNew) p.jurisprudencia.push(j); LM.save(); close(); LM.toast('Ficha guardada ✓'); done&&done(); }; }); };
+LM.jurisTab=function(tc,p,redraw){ const L=p.jurisprudencia=p.jurisprudencia||[];
+  tc.innerHTML='<div class="row between"><h2>Fichas de jurisprudencia ('+L.length+')</h2><div class="row"><button class="btn sm primary" id="jn">＋ Nueva ficha</button>'+(L.length?'<button class="btn sm" id="jdocall">⬇ Todas (.doc)</button>':'')+'</div></div><p class="small muted">Fichas con estructura fija. Las de ejemplo son ficticias y no deben citarse.</p><div class="list">'+
+   (L.map(j=>'<div class="card"><div class="row between"><b>'+E(v(j.corporacion)||NC)+'</b><span class="small muted">'+(j.fecha?LM.fmt(j.fecha):NC)+'</span></div><div class="small muted">'+E(v(j.sala)||'')+' · Rad. '+E(v(j.radicado)||NC)+'</div><p class="small"><b>Regla:</b> '+(E(v(j.regla))||'<i class="muted">'+NC+'</i>')+'</p><div class="row"><button class="btn sm" data-jv="'+j.id+'">Ver ficha</button><button class="btn sm" data-je="'+j.id+'">✎ Editar</button><button class="btn sm" data-jd="'+j.id+'">⬇ .doc</button><button class="btn sm" data-jp="'+j.id+'">🖨 Imprimir</button><button class="btn sm danger" data-jx="'+j.id+'">Eliminar</button></div></div>').join('')||'<p class="muted">Aún no hay fichas para este proceso.</p>')+'</div>';
+  const f=id=>L.find(x=>x.id===id);
+  tc.querySelector('#jn').onclick=()=>LM.jurisForm(p,null,redraw);
+  const all=tc.querySelector('#jdocall'); if(all) all.onclick=()=>{ LM.download('Fichas_jurisprudencia_'+p.radicado.slice(-9)+'.doc','\ufeff'+LM.fichaDoc(L,p),'application/msword'); LM.toast('Fichas descargadas ✓'); };
+  tc.querySelectorAll('[data-jv]').forEach(b=>b.onclick=()=>LM.modal(LM.fichaHtml(f(b.dataset.jv),p)+'<div class="row" style="justify-content:flex-end;margin-top:1rem"><button class="btn" data-close>Cerrar</button></div>'));
+  tc.querySelectorAll('[data-je]').forEach(b=>b.onclick=()=>LM.jurisForm(p,f(b.dataset.je),redraw));
+  tc.querySelectorAll('[data-jd]').forEach(b=>b.onclick=()=>{ LM.download('Ficha_'+b.dataset.jd+'.doc','\ufeff'+LM.fichaDoc([f(b.dataset.jd)],p),'application/msword'); LM.toast('Ficha descargada ✓'); });
+  tc.querySelectorAll('[data-jp]').forEach(b=>b.onclick=()=>LM.printDoc('<p class="f">Documento de demostración.</p>'+LM.fichaHtml(f(b.dataset.jp),p).replace(/class="nc"/g,'style="color:#666;font-style:italic"')));
+  tc.querySelectorAll('[data-jx]').forEach(b=>b.onclick=()=>{ if(!confirm('¿Eliminar esta ficha?')) return; p.jurisprudencia=L.filter(x=>x.id!==b.dataset.jx); LM.save(); LM.toast('Ficha eliminada'); redraw(); });
+};
+
+/* ================= BIBLIOTECA DE INSTRUCCIONES PARA IA ================= */
+const REGLAS=`REGLAS OBLIGATORIAS
+1. No inventes nada que no esté en los documentos o datos que te entrego. Si un dato falta, escribe exactamente: "No consta".
+2. Las citas normativas deben ser textuales y solo si el texto de la norma aparece en lo que te entrego; si no lo tienes, escribe "[norma por verificar: …]" y no la parafrasees como si fuera cita.
+3. No inventes jurisprudencia, radicados, fechas, nombres ni cifras.
+4. Distingue claramente hechos (lo que dicen los documentos) de argumentos (tu propuesta).
+5. Al final, incluye una lista "PUNTOS A VERIFICAR POR EL ABOGADO" con todo dato faltante o dudoso.`;
+const P=[
+ ['contestacion','Contestación de demanda','Actúa como abogado(a) litigante en derecho administrativo colombiano. Redacta un BORRADOR de contestación de demanda.','ESTRUCTURA\n1. Encabezado (despacho, radicado, medio de control, partes).\n2. Pronunciamiento sobre las pretensiones (una por una).\n3. Pronunciamiento sobre los hechos (admitido / no admitido / no consta, uno por uno, con la razón).\n4. Excepciones (previas y de fondo) con su fundamento en los documentos.\n5. Fundamentos de derecho (citas textuales o [norma por verificar]).\n6. Pruebas que se aportan y que se solicitan.\n7. Anexos y notificaciones.'],
+ ['reposicion','Recurso de reposición','Actúa como abogado(a) litigante en derecho administrativo colombiano. Redacta un BORRADOR de recurso de reposición contra la providencia indicada.','ESTRUCTURA\n1. Encabezado e identificación de la providencia recurrida (fecha y contenido según el documento).\n2. Oportunidad: fecha de notificación y término (si no consta, escribe "No consta" y no lo calcules).\n3. Procedencia del recurso (cita textual o [norma por verificar]).\n4. Motivos de inconformidad, numerados.\n5. Petición concreta.\n6. Pruebas o anexos, si los hay.'],
+ ['apelacion','Recurso de apelación','Actúa como abogado(a) litigante en derecho administrativo colombiano. Redacta un BORRADOR de recurso de apelación.','ESTRUCTURA\n1. Encabezado e identificación de la decisión apelada.\n2. Oportunidad y procedencia (sin calcular términos que no consten).\n3. Reparos concretos a la decisión, uno por uno, citando la parte del texto apelado.\n4. Sustentación de cada reparo con base en los documentos.\n5. Peticiones al superior.\n6. Anexos.'],
+ ['tutela','Acción de tutela','Actúa como abogado(a) en derecho constitucional colombiano. Redacta un BORRADOR de acción de tutela.','ESTRUCTURA\n1. Juez competente (si no consta, "No consta").\n2. Partes (accionante, accionado, vinculados).\n3. Hechos numerados, solo los que constan.\n4. Derechos fundamentales presuntamente vulnerados.\n5. Procedencia: subsidiariedad e inmediatez, con base en los hechos.\n6. Pretensiones.\n7. Pruebas.\n8. Juramento (manifestación de no haber presentado otra tutela por los mismos hechos — confirmar con el cliente).\n9. Notificaciones.'],
+ ['concepto','Concepto jurídico','Actúa como abogado(a) consultor(a) en derecho administrativo colombiano. Elabora un BORRADOR de concepto jurídico.','ESTRUCTURA\n1. Pregunta planteada.\n2. Antecedentes (solo hechos de los documentos).\n3. Marco normativo (citas textuales o [norma por verificar]).\n4. Análisis.\n5. Conclusión y recomendaciones.\n6. Riesgos y limitaciones del concepto.'],
+ ['ficha','Ficha de jurisprudencia','Actúa como asistente de investigación jurídica. Elabora una ficha de jurisprudencia de la providencia que te entrego.','ESTRUCTURA (respeta exactamente estos campos)\n1. Identificación: corporación, sala/sección, radicado, fecha, ponente.\n2. Hechos.\n3. Problema jurídico.\n4. Consideraciones (resumen fiel; citas textuales entre comillas con su página o párrafo).\n5. Conclusión / regla.\n6. Observaciones / relevancia para el caso (relación con los datos del proceso).\nSi un campo no aparece en la providencia, escribe "No consta en el documento".'],
+ ['resumen','Resumen de providencia','Actúa como asistente jurídico. Resume la providencia que te entrego para el abogado y, aparte, en lenguaje sencillo para el cliente.','ESTRUCTURA\n1. Datos de la providencia (tipo, fecha, despacho).\n2. Qué decidió (parte resolutiva, casi textual).\n3. Razones principales.\n4. Qué sigue y qué términos se abren (solo si constan; no los calcules).\n5. Versión para el cliente: máximo 5 frases, sin tecnicismos.']
+];
+LM.PROMPTS=P;
+function datosProceso(p,anon){ const c=LM.cli(p.clienteId); const nc=x=>v(x)||'No consta'; const cn=anon?'[CLIENTE]':c.nombre;
+  const dte=anon&&p.demandante===c.nombre?'[CLIENTE]':(anon?'[DEMANDANTE]':p.demandante);
+  const acts=(p.actuaciones||[]).slice().sort((a,b)=>a.fecha<b.fecha?1:-1).slice(0,6);
+  return 'DATOS DEL PROCESO (registrados en '+LM.state.config.appName+'; verifíquelos contra el expediente)\n- Radicado: '+(anon?'[RADICADO]':nc(LM.fmtRad(p.radicado)))+'\n- Medio de control: '+nc(p.medio)+'\n- Despacho: '+nc(p.despacho)+'\n- Ponente / juez: '+nc(p.ponente)+'\n- Cliente: '+(c.id?cn:'No consta')+'\n- Demandante: '+nc(dte)+'\n- Demandado: '+nc(p.demandado)+'\n- Etapa: '+nc(p.etapa)+'\n- Resumen interno: '+nc(anon?String(p.resumen||'').split(c.nombre).join('[CLIENTE]'):p.resumen)+'\n- Últimas actuaciones registradas:\n'+(acts.map(a=>'  • '+a.fecha+' – '+a.titulo+(a.detalle?': '+a.detalle:'')).join('\n')||'  No consta')+'\n'; }
+LM.buildPrompt=function(key,p,opt){ const t=P.find(x=>x[0]===key); opt=opt||{};
+  const data=opt.fill&&p?datosProceso(p,opt.anon):'DATOS DEL PROCESO\n- Radicado: [completar]\n- Medio de control: [completar]\n- Despacho: [completar]\n- Partes: [completar]\n- Etapa: [completar]\n';
+  return t[2]+'\n\n'+REGLAS+'\n\n'+t[3]+'\n\n'+data+'\nDOCUMENTOS\n[Pegue aquí el texto ANONIMIZADO de la demanda, providencia o documentos pertinentes]\n\nFORMATO DE SALIDA\nTexto en español jurídico formal, con títulos en mayúscula, listo para revisión del abogado. Marca como [VERIFICAR] cualquier afirmación que no esté soportada en los documentos.'; };
+function iaView(el,pid,key){ const S=LM.state; key=key||'contestacion';
+  el.insertAdjacentHTML('beforeend','<div class="card conf" style="margin-bottom:1rem"><b>🔒 Confidencialidad.</b> <span class="small">Antes de pegar información en una IA externa, anonimice los datos de los clientes (nombres, documentos, direcciones, datos de salud y radicados). El secreto profesional del abogado y la Ley 1581 de 2012 (protección de datos personales) siguen aplicando. Use solo herramientas autorizadas por la firma.</span></div>'+
+   '<div class="grid g2" style="align-items:start"><div class="card no-print"><h2>Instrucciones disponibles</h2><div class="list" id="plist">'+P.map(x=>'<button class="btn'+(x[0]===key?' primary':'')+'" data-pk="'+x[0]+'" style="justify-content:flex-start">'+E(x[1])+'</button>').join('')+'</div>'+
+   '<label for="ia-p">Proceso</label><select id="ia-p">'+S.procesos.map(p=>'<option value="'+p.id+'"'+(p.id===pid?' selected':'')+'>'+LM.fmtRad(p.radicado).slice(0,24)+' · '+E(p.medio)+'</option>').join('')+'</select>'+
+   '<label class="row" style="font-weight:500"><input type="checkbox" id="ia-fill" checked> Rellenar automáticamente con los datos del proceso</label><label class="row" style="font-weight:500"><input type="checkbox" id="ia-anon" checked> Anonimizar cliente y radicado</label></div>'+
+   '<div class="card"><div class="row between"><h2 id="ia-t"></h2><button class="btn primary" id="ia-copy">📋 Copiar</button></div><label for="ia-out" class="small muted">Instrucción (editable)</label><textarea id="ia-out" class="prompt-out"></textarea></div></div>');
+  const gen=()=>{ const p=LM.proc(el.querySelector('#ia-p').value); el.querySelector('#ia-t').textContent=P.find(x=>x[0]===key)[1]; el.querySelector('#ia-out').value=LM.buildPrompt(key,p,{fill:el.querySelector('#ia-fill').checked,anon:el.querySelector('#ia-anon').checked}); };
+  el.querySelectorAll('[data-pk]').forEach(b=>b.onclick=()=>{ key=b.dataset.pk; el.querySelectorAll('[data-pk]').forEach(x=>x.classList.toggle('primary',x===b)); history.replaceState(null,'','#/borradores/'+el.querySelector('#ia-p').value+'/@ia/'+key); gen(); });
+  el.querySelectorAll('#ia-p,#ia-fill,#ia-anon').forEach(x=>x.onchange=gen); gen();
+  el.querySelector('#ia-copy').onclick=()=>{ const t=el.querySelector('#ia-out'); (navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(()=>LM.toast('Instrucción copiada ✓'),()=>{ t.select(); try{document.execCommand('copy');LM.toast('Instrucción copiada ✓');}catch(e){LM.toast('Seleccione y copie manualmente');} }); };
+}
+function jurisView(el,pid){ const S=LM.state;
+  el.insertAdjacentHTML('beforeend','<div class="card no-print" style="margin-bottom:1rem"><label for="jb-p">Proceso</label><select id="jb-p">'+S.procesos.map(p=>'<option value="'+p.id+'"'+(p.id===pid?' selected':'')+'>'+LM.fmtRad(p.radicado).slice(0,24)+' · '+E(p.medio)+' ('+(p.jurisprudencia||[]).length+' fichas)</option>').join('')+'</select><p class="small muted" style="margin-top:.5rem">También disponible en la pestaña «Jurisprudencia» de cada proceso.</p></div><div id="jb"></div>');
+  const draw=()=>{ const p=LM.proc(el.querySelector('#jb-p').value); LM.jurisTab(el.querySelector('#jb'),p,draw); };
+  el.querySelector('#jb-p').onchange=()=>{ history.replaceState(null,'','#/borradores/'+el.querySelector('#jb-p').value+'/@juris'); draw(); }; draw(); }
+const origB=V.borradores;
+V.borradores=function(el,args){ const S=LM.state; const pid=args[0]&&LM.proc(args[0])?args[0]:S.procesos[0].id; const mode=args[1]||'';
+  const nav='<nav class="subnav no-print" aria-label="Secciones de borradores"><a class="btn sm'+(mode[0]!=='@'?' active':'')+'" href="#/borradores/'+pid+'">📝 Plantillas</a><a class="btn sm'+(mode==='@juris'?' active':'')+'" href="#/borradores/'+pid+'/@juris">📚 Fichas de jurisprudencia</a><a class="btn sm'+(mode==='@ia'?' active':'')+'" href="#/borradores/'+pid+'/@ia">🤖 Instrucciones para IA</a></nav>';
+  if(mode==='@juris'){ el.innerHTML='<h1>Fichas de jurisprudencia</h1>'+nav; return jurisView(el,pid); }
+  if(mode==='@ia'){ el.innerHTML='<h1>Biblioteca de instrucciones para IA</h1>'+nav+'<p class="small muted">Instrucciones (prompts) listas para copiar en la herramienta de IA que use la firma. Siempre revise el resultado: la IA puede equivocarse.</p>'; return iaView(el,pid,args[2]); }
+  origB(el,args); const h=el.querySelector('h1'); h.insertAdjacentHTML('afterend',nav); };
+
+/* ================= PORTAL: PUBLICACIÓN POR PROCESO / ACTUACIÓN ================= */
+LM.portalTab=function(tc,p,redraw){ const sh=SH.load(); const acc=sh.accesos.find(a=>a.clienteId===p.clienteId&&a.activo); const c=LM.cli(p.clienteId);
+  const acts=p.actuaciones.slice().sort((a,b)=>a.fecha<b.fecha?1:-1);
+  tc.innerHTML='<div class="card"><h2>Portal del cliente</h2><p class="small muted">El cliente solo ve lo que usted marque aquí, con el «Resumen para el cliente». Nunca ve notas internas, documentos ni el detalle técnico.</p>'+
+   (acc?'<p class="small"><span class="chip ok">Acceso activo</span> '+E(c.nombre)+' ya puede ingresar al portal.</p>':'<p class="small"><span class="chip warn">Sin acceso</span> El cliente aún no tiene código. <a href="#/clientes/'+c.id+'">Generar acceso al portal</a></p>')+
+   '<label class="row" style="font-weight:700"><input type="checkbox" id="pp-on"'+(p.publicar?' checked':'')+'> Publicar en portal del cliente</label>'+
+   '<label for="pp-res">Resumen para el cliente (lenguaje sencillo)</label><textarea id="pp-res" placeholder="Ej.: Demandamos la decisión de la entidad. El juzgado aceptó estudiar el caso…">'+E(p.resumenCliente||'')+'</textarea></div>'+
+   '<h2 style="margin-top:1rem">Actuaciones</h2><div id="pp-acts">'+acts.map(a=>'<div class="pub-act'+(a.publicar?' on':'')+'"><div class="row between"><label class="row" style="margin:0;font-weight:600"><input type="checkbox" data-pa="'+a.id+'"'+(a.publicar?' checked':'')+'> '+E(a.titulo)+'</label><span class="small muted">'+LM.fmt(a.fecha)+'</span></div><label for="pr-'+a.id+'" class="small">Resumen para el cliente</label><textarea id="pr-'+a.id+'" data-pr="'+a.id+'" style="min-height:64px" placeholder="Explique en palabras sencillas qué pasó y si debe hacer algo">'+E(a.resumenCliente||'')+'</textarea></div>').join('')+'</div>'+
+   '<div class="row" style="margin-top:.6rem"><button class="btn primary" id="pp-save">💾 Guardar y publicar</button><a class="btn" href="'+LM.sitioURL+'#/portal" target="_blank" rel="noopener">🌐 Ver portal</a></div><p class="small muted" id="pp-msg"></p>';
+  tc.querySelector('#pp-save').onclick=()=>{ p.publicar=tc.querySelector('#pp-on').checked; p.resumenCliente=tc.querySelector('#pp-res').value.trim(); let sin=0;
+    p.actuaciones.forEach(a=>{ const cb=tc.querySelector('[data-pa="'+a.id+'"]'); if(!cb) return; a.publicar=cb.checked; a.resumenCliente=tc.querySelector('[data-pr="'+a.id+'"]').value.trim(); if(a.publicar&&!a.resumenCliente) sin++; });
+    LM.save(); LM.toast(p.publicar?'Publicado en el portal ✓':'Proceso oculto del portal'); redraw(); if(sin) LM.toast(sin+' actuación(es) marcadas sin resumen: no se muestran al cliente'); };
+};
+/* ================= ACCESO AL PORTAL (Clientes) ================= */
+LM.accesoCard=function(c){ const a=SH.load().accesos.find(x=>x.clienteId===c.id&&x.activo);
+  return '<div class="card" style="margin-top:1rem" id="accCard"><div class="row between"><h2>🌐 Acceso al portal del cliente</h2>'+(a?'<span class="chip ok">Activo</span>':'<span class="chip">Sin acceso</span>')+'</div>'+
+   (a?'<p class="small">Documento: <b>'+E(c.doc)+'</b> · Código: <b class="mono" id="accCode">'+E(a.codigo)+'</b> · creado '+LM.fmt(a.creado)+'</p>':'<p class="small muted">Genere un código para que el cliente consulte sus procesos publicados en el portal con su documento + código.</p>')+
+   '<div class="row"><button class="btn primary" id="accGen">🔑 '+(a?'Regenerar':'Generar')+' acceso al portal</button>'+(a?'<button class="btn danger" id="accRev">Revocar</button>':'')+'<a class="btn" href="'+LM.sitioURL+'#/portal" target="_blank" rel="noopener">Abrir portal</a></div><p class="small muted">Demo: el código se guarda en este navegador. En producción se envía por un canal seguro y se guarda cifrado.</p></div>'; };
+LM.accesoBind=function(el,c,redraw){ const g=el.querySelector('#accGen'); if(!g) return;
+  g.onclick=()=>{ const code=SH.genCode(); SH.update(d=>{ d.accesos.forEach(a=>{ if(a.clienteId===c.id) a.activo=false; }); d.accesos=d.accesos.filter(a=>a.activo); d.accesos.push({clienteId:c.id,docNorm:SH.normDoc(c.doc),codigo:code,creado:LM.iso(LM.today()),activo:true}); });
+    LM.save(); redraw(); LM.modal('<h2>Acceso generado ✓</h2><p>Entregue estos datos al cliente por un canal seguro:</p><div class="card"><p>Portal: <b>'+E(new URL(LM.sitioURL+'#/portal',location.href).href)+'</b><br>Documento: <b>'+E(c.doc)+'</b><br>Código de acceso: <b class="mono" style="font-size:1.2rem">'+code+'</b></p></div><p class="small muted">El cliente solo verá los procesos y actuaciones que usted marque como publicados.</p><div class="row" style="justify-content:flex-end"><button class="btn primary" data-close>Listo</button></div>'); };
+  const r=el.querySelector('#accRev'); if(r) r.onclick=()=>{ if(!confirm('¿Revocar el acceso al portal de este cliente?')) return; SH.update(d=>{ d.accesos=d.accesos.filter(a=>a.clienteId!==c.id); }); LM.toast('Acceso revocado'); redraw(); }; };
+
+/* ================= SOLICITUDES DEL PORTAL (bandeja) ================= */
+const EST={nueva:['Nueva','danger'],en_tramite:['En trámite','warn'],respondida:['Respondida','ok']};
+const ORI={contacto:'Formulario de contacto',portal:'Portal del cliente',asistente:'Asistente virtual'};
+V.solicitudes=function(el,args){ const S=LM.state; const d=SH.load(); const f=args[0]||'';
+  const L=d.solicitudes.filter(s=>!f||s.estado===f); const cnt=k=>d.solicitudes.filter(s=>s.estado===k).length;
+  el.innerHTML='<div class="row between"><h1>📨 Solicitudes del portal</h1><a class="btn sm" href="'+LM.sitioURL+'" target="_blank" rel="noopener">🌐 Ver sitio del cliente</a></div><p class="small muted">Consultas que llegan del formulario de contacto del sitio web, del portal del cliente y del asistente virtual. Se actualiza en vivo si el sitio está abierto en otra pestaña de este navegador (demo).</p>'+
+   '<div class="subnav"><a class="btn sm'+(f?'':' active')+'" href="#/solicitudes">Todas ('+d.solicitudes.length+')</a>'+Object.entries(EST).map(([k,[t]])=>'<a class="btn sm'+(f===k?' active':'')+'" href="#/solicitudes/'+k+'">'+t+' ('+cnt(k)+')</a>').join('')+'</div><div class="list">'+
+   (L.map(s=>{ const c=S.clientes.find(x=>x.id===s.clienteId); const ps=S.procesos.filter(p=>!s.clienteId||p.clienteId===s.clienteId);
+    return '<div class="card sol '+s.estado+'" data-sid="'+s.id+'"><div class="row between"><b>'+E(s.asunto||'(sin asunto)')+'</b><span class="chip '+EST[s.estado][1]+'">'+EST[s.estado][0]+'</span></div><div class="small muted">'+E(s.fecha.replace('T',' '))+' · '+E(ORI[s.origen]||s.origen)+' · '+E(s.nombre||(c&&c.nombre)||'—')+(s.email?' · '+E(s.email):'')+(s.tel?' · '+E(s.tel):'')+'</div><p style="white-space:pre-wrap">'+E(s.mensaje)+'</p>'+
+     (s.adjuntos&&s.adjuntos.length?'<div class="row small">📎 '+s.adjuntos.map(a=>'<button class="btn sm" data-att="'+a.id+'" data-n="'+E(a.nombre)+'">'+E(a.nombre)+' ('+Math.max(1,Math.round(a.size/1024))+' KB)</button>').join('')+'</div>':'')+
+     '<div class="grid g3"><div><label for="sc-'+s.id+'">Cliente</label><select id="sc-'+s.id+'" data-k="clienteId"><option value="">— Sin vincular —</option>'+S.clientes.map(x=>'<option value="'+x.id+'"'+(x.id===s.clienteId?' selected':'')+'>'+E(x.nombre)+'</option>').join('')+'</select></div><div><label for="sp-'+s.id+'">Proceso</label><select id="sp-'+s.id+'" data-k="procesoId"><option value="">— Sin vincular —</option>'+ps.map(p=>'<option value="'+p.id+'"'+(p.id===s.procesoId?' selected':'')+'>'+LM.fmtRad(p.radicado).slice(0,24)+' · '+E(p.medio)+'</option>').join('')+'</select></div><div><label for="se-'+s.id+'">Estado</label><select id="se-'+s.id+'" data-k="estado">'+Object.entries(EST).map(([k,[t]])=>'<option value="'+k+'"'+(k===s.estado?' selected':'')+'>'+t+'</option>').join('')+'</select></div></div>'+
+     '<label for="sr-'+s.id+'">Respuesta del abogado (visible para el cliente en el portal)</label><textarea id="sr-'+s.id+'" data-k="respuesta" style="min-height:80px">'+E(s.respuesta||'')+'</textarea>'+(s.respondidaEn?'<p class="small muted">Respondida el '+E(s.respondidaEn.replace('T',' '))+'</p>':'')+
+     '<div class="row" style="margin-top:.5rem"><button class="btn primary" data-reply="'+s.id+'">✉ Responder</button><button class="btn" data-savesol="'+s.id+'">Guardar cambios</button>'+(s.procesoId?'<a class="btn sm" href="#/proceso/'+s.procesoId+'">Ver proceso</a>':'')+'</div>'+(s.origen==='contacto'&&!s.clienteId?'<p class="small muted">Sin acceso al portal: la respuesta se envía por correo/teléfono (en la demo solo se guarda).</p>':'')+'</div>'; }).join('')||'<p class="muted">No hay solicitudes en esta vista.</p>')+'</div>';
+  const save=(id,reply)=>{ const card=el.querySelector('[data-sid="'+id+'"]'); if(reply&&!card.querySelector('[data-k=respuesta]').value.trim()){ LM.toast('Escriba la respuesta antes de enviarla'); return; } SH.update(dd=>{ const s=dd.solicitudes.find(x=>x.id===id); if(!s) return; card.querySelectorAll('[data-k]').forEach(i=>s[i.dataset.k]=i.value.trim?i.value.trim():i.value);
+      if(reply){ s.estado='respondida'; const t=new Date(); s.respondidaEn=LM.iso(t)+'T'+String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0'); s.leidaCliente=false; }
+      else if(s.estado==='respondida'&&!s.respondidaEn&&s.respuesta){ s.respondidaEn=new Date().toISOString().slice(0,16); } });
+    LM.toast(reply?'Respuesta enviada al portal ✓':'Solicitud actualizada ✓'); LM.refreshChrome(); V.solicitudes(el,args); };
+  el.querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>save(b.dataset.reply,true));
+  el.querySelectorAll('[data-savesol]').forEach(b=>b.onclick=()=>save(b.dataset.savesol,false));
+  el.querySelectorAll('select[data-k=clienteId]').forEach(sel=>sel.onchange=()=>{ const card=sel.closest('[data-sid]'); const ps=S.procesos.filter(p=>!sel.value||p.clienteId===sel.value); card.querySelector('select[data-k=procesoId]').innerHTML='<option value="">— Sin vincular —</option>'+ps.map(p=>'<option value="'+p.id+'">'+LM.fmtRad(p.radicado).slice(0,24)+' · '+E(p.medio)+'</option>').join(''); });
+  el.querySelectorAll('[data-att]').forEach(b=>b.onclick=async()=>{ try{ const blob=await SH.fileGet(b.dataset.att); if(!blob) return LM.toast('Archivo no disponible en este navegador'); LM.download(b.dataset.n,blob); }catch(e){ LM.toast('No se pudo abrir'); } });
+};
+const origA=V.alertas; V.alertas=function(el,args){ origA(el,args); const n=SH.countNuevas(); if(n){ const h=el.querySelector('h1'); h&&h.insertAdjacentHTML('afterend','<a class="card item row between" href="#/solicitudes/nueva" style="margin:.5rem 0"><span>📨 Tiene <b>'+n+'</b> solicitud'+(n>1?'es':'')+' nueva'+(n>1?'s':'')+' del portal</span><span class="btn sm primary">Ver bandeja</span></a>'); } };
 })();
 
 </script>

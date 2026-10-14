@@ -17,6 +17,7 @@
   <button class="iconbtn sheet-trigger" id="btnMenu" aria-label="Más módulos">☰</button>
   <div class="brand"><span class="logo" aria-hidden="true">⚖</span><span id="appName">LexMonitor</span></div>
   <span class="sp"></span>
+  <a class="btn sm xlink" href="sitio/" target="_blank" rel="noopener" title="Abre el sitio web de la firma y el portal del cliente (demo)">🌐 <span class="hide-sm">Ver sitio del cliente</span></a>
   <button class="iconbtn" id="btnAlerts" aria-label="Alertas">🔔<span class="badge hide" id="alertBadge">0</span></button>
   <button class="iconbtn" id="btnTheme" aria-label="Cambiar modo claro u oscuro">◐</button>
 </header>
@@ -28,12 +29,14 @@
 <div class="sheet-backdrop" id="sheetBg"></div>
 <div class="sheet" id="sheet" role="dialog" aria-label="Todos los módulos"><h2>Módulos</h2><div class="grid-links" id="sheetLinks"></div></div>
 <div class="toast-wrap" id="toasts" aria-live="polite"></div>
+<script src="js/shared-store.js"></script>
 <script src="js/lib.js"></script>
 <script src="js/data.js"></script>
 <script src="js/app.js"></script>
 <script src="js/mod-core.js"></script>
 <script src="js/mod-tools.js"></script>
 <script src="js/mod-docs.js"></script>
+<script src="js/mod-portal.js"></script>
 <script>LM.boot();</script>
 </body>
 </html>

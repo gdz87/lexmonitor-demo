@@ -81,3 +81,13 @@ svg text{fill:var(--text)}.hide{display:none!important}
 @media print{.demo-banner,.topbar,.sidenav,.bottomnav,.no-print,.toast-wrap{display:none!important}main{padding:0}body{background:#fff;color:#000}.card{box-shadow:none;border:0}.print-area{display:block}}
 label.row{flex-wrap:nowrap;align-items:flex-start;gap:.6rem}label.row input[type=checkbox]{flex:none;margin-top:1px}
 .row>.ev{padding:2px 8px;border-radius:99px;font-size:.75rem}
+
+/* v2: portal, solicitudes, jurisprudencia, prompts */
+@media(max-width:560px){.hide-sm{display:none}}
+.nb{margin-left:auto;font-size:.68rem;padding:1px 7px}
+.subnav{display:flex;gap:.4rem;flex-wrap:wrap;margin:.4rem 0 .8rem}.subnav a{text-decoration:none}.subnav a.active{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
+.ficha dt{font-weight:700;margin-top:.7rem}.ficha dd{margin:.2rem 0 0;white-space:pre-wrap}.ficha .nc{color:var(--muted);font-style:italic}
+.conf{border-left:4px solid var(--warn);background:color-mix(in srgb,var(--warn) 10%,var(--surface))}
+.sol.nueva{border-left:4px solid var(--danger)}.sol.en_tramite{border-left:4px solid var(--warn)}.sol.respondida{border-left:4px solid var(--ok)}
+.prompt-out{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;min-height:50vh;width:100%}
+.pub-act{border:1px solid var(--border);border-radius:12px;padding:.7rem;margin-bottom:.6rem}.pub-act.on{border-color:var(--ok)}

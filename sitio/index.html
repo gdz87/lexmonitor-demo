@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14284b">
+<meta name="description" content="Sitio web de demostración de una firma de derecho administrativo con portal de clientes (datos ficticios)">
+<title>Firma de abogados · Derecho Administrativo (demo)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314284b'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle' fill='%23e3b448'%3E%E2%9A%96%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/sitio.css">
+</head>
+<body>
+<div class="demo-banner" role="note">⚠ Sitio de DEMOSTRACIÓN · firma, personas y procesos ficticios · no es asesoría jurídica</div>
+<header class="top">
+  <a class="brand" href="#/inicio"><span class="logo" aria-hidden="true">⚖</span><span><b id="firmaNom">Firma</b><small id="firmaLema">Derecho Administrativo</small></span></a>
+  <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="mainnav" aria-label="Abrir menú">☰</button>
+  <nav id="mainnav" aria-label="Secciones">
+    <a href="#/inicio" data-r="inicio">Inicio</a><a href="#/servicios" data-r="servicios">Servicios</a><a href="#/firma" data-r="firma">La firma</a><a href="#/faq" data-r="faq">Preguntas</a><a href="#/contacto" data-r="contacto">Contacto</a>
+    <a href="#/portal" data-r="portal" class="cta">🔐 Portal del cliente</a>
+    <a href="../" class="xlink" title="Ingreso del abogado a LexMonitor (demo)">Acceso abogado</a>
+  </nav>
+</header>
+<main id="view" tabindex="-1"></main>
+<footer class="foot">
+  <div class="wrap grid3">
+    <div><b id="fFirma"></b><br><span id="fDir"></span><br><span id="fTel"></span> · <span id="fMail"></span></div>
+    <div><b>Horario</b><br><span id="fHor"></span></div>
+    <div><a href="#/datos">Política de tratamiento de datos</a><br><a href="#/portal">Portal del cliente</a><br><a href="../">Acceso abogado (LexMonitor)</a></div>
+  </div>
+  <p class="wrap small muted">Demo: la información de este sitio es general y no constituye asesoría jurídica. Datos guardados solo en este navegador.</p>
+</footer>
+<button class="chat-fab" id="chatFab" aria-label="Abrir asistente virtual" aria-controls="chat">💬 <span>Asistente</span></button>
+<section class="chat" id="chat" role="dialog" aria-label="Asistente virtual" hidden>
+  <header><b>Asistente virtual</b><small>Información general · no es asesoría jurídica</small><button id="chatClose" aria-label="Cerrar asistente">✕</button></header>
+  <div class="chat-log" id="chatLog" aria-live="polite"></div>
+  <div class="chat-quick" id="chatQuick"></div>
+  <form class="chat-in" id="chatForm"><label for="chatTxt" class="sr">Escriba su pregunta</label><input id="chatTxt" autocomplete="off" placeholder="Escriba su pregunta…"><button class="btn primary">Enviar</button></form>
+</section>
+<div class="toast-wrap" id="toasts" aria-live="polite"></div>
+<script src="js/config.js"></script>
+<script src="js/shared-store.js"></script>
+<script src="js/sitio.js"></script>
+<script src="js/chat.js"></script>
+</body>
+</html>

@@ -3,3 +3,22 @@ Abrir: doble clic en index.html (funciona sin internet) o LexMonitor_demo.html (
 Instalar como app: servir la carpeta por HTTPS (p. ej. GitHub Pages/Netlify) y usar "Agregar a pantalla de inicio".
 Datos: se guardan en el navegador. Configuración > Exportar/Importar JSON o Restaurar demo.
 Simulado: monitoreo SAMAI, envíos WhatsApp/correo. Real: calculadora de términos, radicado, agenda, asistente, borradores, informes.
+
+=== Versión 2 (13/10/2026) ===
+Nuevo en LexMonitor:
+- Ficha de jurisprudencia: pestaña "Jurisprudencia" en cada proceso y en Borradores > Fichas. Campos fijos; lo vacío se muestra "No consta en el documento". Exporta .doc / imprime. Las 2 fichas de ejemplo (proceso p1) son FICTICIAS.
+- Borradores > Instrucciones para IA: 7 prompts (contestación, reposición, apelación, tutela, concepto, ficha de jurisprudencia, resumen de providencia), con relleno automático, anonimización y botón Copiar. Aviso de confidencialidad (secreto profesional, Ley 1581 de 2012).
+- Asistente de revisión: regla "Datos faltantes" (cliente, despacho, medio de control, fecha de presentación/notificación, apoderado). No supone valores. El proceso de ejemplo p9 la dispara.
+- Solicitudes del portal (bandeja): estado nueva / en trámite / respondida, vínculo a cliente y proceso, respuesta visible en el portal, adjuntos. Contador en tablero y campana.
+- Ficha del proceso > "Portal del cliente": casilla "Publicar en portal del cliente" y "Resumen para el cliente" por proceso y por actuación (es lo único que ve el cliente).
+- Clientes > ficha del cliente > "Generar acceso al portal" (documento + código).
+
+CONEXIÓN CON EL SITIO WEB (/sitio/) — SOLO DEMO
+- LexMonitor (raíz) y el sitio (/sitio/) se publican en el mismo origen y comparten el almacén js/shared-store.js
+  (localStorage 'lexportal.v1' + IndexedDB 'lexmonitor-files' para adjuntos). Esquema documentado al inicio de ese archivo.
+- LexMonitor proyecta al almacén SOLO lo publicado (procesos marcados, actuaciones con resumen, próximas fechas). Nunca notas internas ni documentos.
+- Con ambos abiertos en pestañas del MISMO navegador, el evento 'storage' y BroadcastChannel actualizan en vivo la bandeja y el portal.
+- LÍMITES: todo vive en el navegador del usuario. Otro dispositivo u otro navegador NO ve los datos; el "ingreso" del portal no es seguridad real
+  (los códigos están en el propio navegador); borrar datos del navegador lo borra todo. En el archivo único LexMonitor_demo.html no hay conexión.
+- EN PRODUCCIÓN (Fase 2 de la propuesta) esto se reemplaza por un servidor con API, base de datos, autenticación real (contraseñas/códigos cifrados,
+  sesiones, MFA para el abogado), control de acceso por cliente, almacenamiento seguro de archivos, registro de auditoría y avisos por correo/WhatsApp.

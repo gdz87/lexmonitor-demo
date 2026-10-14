@@ -45,21 +45,38 @@ LM.demoData=function(){
     resumen:'Sanción administrativa. Sentencia de primera instancia parcialmente favorable.',
     actuaciones:[A(-640,'radicacion','Radicación',''),A(-600,'providencia','Admite',''),A(-60,'providencia','Sentencia de primera instancia','Accede parcialmente.'),A(-75,'audiencia','Audiencia de alegatos y juzgamiento','Registrada después de la sentencia (posible error de carga).'),A(-50,'memorial','Recurso de apelación','')],
     eventos:[]},
-   {id:'p9',radicado:'15001233300020219999',medio:'Nulidad simple',despacho:'Tribunal Administrativo de Boyacá',ponente:'—',clienteId:'c6',demandante:'Cooperativa Agraria del Valle de Tenza (ficticia)',demandado:'Corporación ficticia ambiental regional',estado:'Activo',etapa:'Admisión',cuantia:0,fechaHecho:D(-400),
-    resumen:'Nulidad de acuerdo ambiental. Radicado cargado incompleto (ejemplo para el asistente).',
+   {id:'p9',radicado:'15001233300020219999',medio:'Nulidad simple',despacho:'',ponente:'—',clienteId:'c6',demandante:'Cooperativa Agraria del Valle de Tenza (ficticia)',demandado:'Corporación ficticia ambiental regional',estado:'Activo',etapa:'Admisión',cuantia:0,fechaHecho:D(-400),
+    resumen:'Nulidad de acuerdo ambiental. Radicado cargado incompleto y sin despacho ni apoderado (ejemplo para el asistente).',
     actuaciones:[A(-45,'radicacion','Radicación','')],eventos:[]},
    {id:'p10',radicado:'11001032500020250031000',medio:'Nulidad y restablecimiento del derecho',despacho:'Consejo de Estado – Sección Segunda',ponente:'Consejero(a) ficticio(a)',clienteId:'c5',demandante:'Hernán Pulido Suesca (ficticio)',demandado:'Entidad nacional ficticia de Servicio Civil',estado:'Terminado',etapa:'Archivo',cuantia:52000000,fechaHecho:D(-1300),
     resumen:'Proceso terminado con sentencia favorable ejecutoriada.',
     actuaciones:[A(-1000,'radicacion','Radicación',''),A(-300,'providencia','Sentencia favorable',''),A(-240,'providencia','Constancia de ejecutoria',''),A(-200,'providencia','Archivo','')],eventos:[]}
   ];
-  procesos.forEach(p=>{p.ficticio=true;p.documentos=[];p.notas='';});
+  const ABOG='Abogado(a) titular';
+  procesos.forEach(p=>{p.ficticio=true;p.documentos=[];p.notas='';p.apoderado=p.id==='p9'?'':ABOG;p.jurisprudencia=[];p.publicar=false;p.resumenCliente='';});
+  /* Publicaciones de ejemplo en el portal del cliente (mismos textos que el almacén compartido) */
+  const PUB=(window.LexShared&&LexShared.DEMO_PUB)||{};
+  Object.keys(PUB).forEach(id=>{ const p=procesos.find(x=>x.id===id); if(!p) return; p.publicar=true; p.resumenCliente=PUB[id].resumen;
+    p.actuaciones.forEach(a=>{ if(PUB[id].acts[a.titulo]){ a.publicar=true; a.resumenCliente=PUB[id].acts[a.titulo]; } }); });
+  /* Fichas de jurisprudencia de ejemplo: TOTALMENTE FICTICIAS (no corresponden a providencias reales) */
+  procesos[0].jurisprudencia=[
+   {id:'j1',corporacion:'Consejo de Estado (EJEMPLO FICTICIO)',sala:'Sala de lo Contencioso Administrativo – Sección Primera',radicado:'00000-00-00-000-0000-00000-00 (ficticio)',fecha:D(-900),ponente:'Consejero(a) ponente ficticio(a) A',
+    hechos:'Un municipio ficticio impuso multa urbanística a una sociedad por obras sin licencia, sin practicar la visita técnica prevista en su propio procedimiento.',
+    problema:'¿Se vulnera el debido proceso cuando la sanción urbanística se impone sin la prueba técnica que el procedimiento exige?',
+    consideraciones:'(Texto de ejemplo) La sala ficticia razona que la potestad sancionatoria exige respetar las etapas del procedimiento y que la ausencia de la prueba técnica impide establecer la infracción.',
+    regla:'(Ejemplo) Sin la prueba técnica exigida por el procedimiento, la sanción carece de soporte y procede su nulidad.',
+    observaciones:'Útil por analogía para el proceso de Inversiones Alto Ricaurte (ficticio): verificar si hubo visita técnica. Ficha de demostración: NO citar.'},
+   {id:'j2',corporacion:'Tribunal Administrativo (EJEMPLO FICTICIO)',sala:'',radicado:'00000-00-00-000-0000-00000-00 (ficticio)',fecha:'',ponente:'',
+    hechos:'Caso ficticio sobre caducidad del medio de control de nulidad y restablecimiento frente a un acto notificado por correo.',
+    problema:'¿Desde cuándo se cuenta la caducidad si la notificación electrónica no tiene acuse de recibo?',
+    consideraciones:'',regla:'',observaciones:'Ficha incompleta a propósito: los campos vacíos se muestran como "No consta en el documento".'}];
   const alertas=[
    {id:'a1',fecha:D(0)+'T07:05',procesoId:'p4',titulo:'Nueva actuación: Auto inadmite demanda',texto:'El despacho inadmitió la demanda y concedió 3 días para corregir.',leida:false,nivel:'alta'},
    {id:'a2',fecha:D(0)+'T07:05',procesoId:'p5',titulo:'Notificación de fallo de tutela',texto:'Fallo niega amparo. Corre término de impugnación.',leida:false,nivel:'alta'},
    {id:'a3',fecha:D(-5)+'T12:00',procesoId:'p1',titulo:'Auto fija fecha de audiencia inicial',texto:'Audiencia inicial programada.',leida:false,nivel:'media'},
    {id:'a4',fecha:D(-40)+'T12:00',procesoId:'p1',titulo:'Contestación de la demanda registrada',texto:'La entidad propuso excepciones.',leida:true,nivel:'baja'}
   ];
-  return {version:1,config:{appName:'LexMonitor',firma:'Firma de abogados (nombre por definir)',abogado:'Abogado(a) titular',tp:'T.P. 000.000 (ficticia)',email:'notificaciones@firma-ejemplo.test',ciudad:'Tunja',theme:'auto',canales:{email:true,whatsapp:true,push:false},horario:{inicio:'07:00',fin:'19:00',frecuencia:3,diasHabiles:true},vacIni:'12-20',vacFin:'01-10',vacSanta:true,inactividadDias:180},
+  return {version:2,config:{appName:'LexMonitor',firma:'Firma de abogados (nombre por definir)',abogado:'Abogado(a) titular',tp:'T.P. 000.000 (ficticia)',email:'notificaciones@firma-ejemplo.test',ciudad:'Tunja',theme:'auto',canales:{email:true,whatsapp:true,push:false},horario:{inicio:'07:00',fin:'19:00',frecuencia:3,diasHabiles:true},vacIni:'12-20',vacFin:'01-10',vacSanta:true,inactividadDias:180},
     clientes,procesos,alertas,simLog:[],createdAt:new Date().toISOString()};
 };
 })();

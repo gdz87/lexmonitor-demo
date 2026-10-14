@@ -118,7 +118,8 @@ LM.fmtRad = r => { r=String(r||'').replace(/\D/g,''); return r.length===23?[r.sl
 
 /* ---- Almacenamiento: localStorage (datos) + IndexedDB (archivos adjuntos) ---- */
 const KEY='lexmonitor.v1';
-LM.save = function(){ try{ localStorage.setItem(KEY,JSON.stringify(LM.state)); }catch(e){ LM.toast && LM.toast('No se pudo guardar: '+e.message); } };
+LM.save = function(){ try{ localStorage.setItem(KEY,JSON.stringify(LM.state)); }catch(e){ LM.toast && LM.toast('No se pudo guardar: '+e.message); }
+  try{ if(window.LexShared&&LM.state) LexShared.syncFromLex(LM.state); }catch(e){ console.warn('Sincronización con portal: '+e.message); } };
 LM.load = function(){ try{ const s=localStorage.getItem(KEY); return s?JSON.parse(s):null; }catch(e){ return null; } };
 LM.reset = function(){ LM.state = LM.demoData(); LM.save(); };
 let dbp=null;
@@ -127,5 +128,6 @@ function db(){ if(dbp) return dbp; dbp=new Promise((res,rej)=>{ if(!window.index
 LM.filePut = async (id,blob)=>{ const d=await db(); return new Promise((res,rej)=>{ const t=d.transaction('files','readwrite'); t.objectStore('files').put(blob,id); t.oncomplete=res; t.onerror=()=>rej(t.error); }); };
 LM.fileGet = async id=>{ const d=await db(); return new Promise((res,rej)=>{ const q=d.transaction('files').objectStore('files').get(id); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); };
 LM.fileDel = async id=>{ const d=await db(); return new Promise(res=>{ const t=d.transaction('files','readwrite'); t.objectStore('files').delete(id); t.oncomplete=res; }); };
+if(window.LexShared){ LM.filePut=(id,b)=>LexShared.filePut(id,b); LM.fileGet=id=>LexShared.fileGet(id); }
 LM.download = function(name,content,type){ const b=content instanceof Blob?content:new Blob([content],{type:type||'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500); };
 })();
