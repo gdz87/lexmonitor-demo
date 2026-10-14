@@ -50,6 +50,10 @@ LM.boot=function(){
     if(!document.querySelector('.modal-bg')&&!typing&&(/^#\/(solicitudes|tablero)?$/.test(h)||h==='')) LM.route(); else if(/^#\/solicitudes/.test(h)) LM.toast('📨 Hay cambios en las solicitudes del portal'); });
   LM.applyTheme(); buildNav(); window.addEventListener('hashchange',LM.route); LM.route();
   if(LM.startScheduler) LM.startScheduler();
-  if('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.LM_SINGLE){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+  if('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.LM_SINGLE){ const had=!!navigator.serviceWorker.controller; let shown=false;
+    const banner=()=>{ if(shown||!had) return; shown=true; const d=document.createElement('div'); d.className='update-bar'; d.setAttribute('role','alert'); d.innerHTML='🔄 Hay una versión nueva <button class="btn sm primary" id="upd-go">Actualizar</button>'; document.body.appendChild(d); d.querySelector('#upd-go').onclick=()=>location.reload(); };
+    navigator.serviceWorker.addEventListener('controllerchange',banner);
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{ const chk=()=>reg.update().catch(()=>{}); document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') chk(); }); setInterval(chk,30*60*1000);
+      reg.addEventListener('updatefound',()=>{ const w=reg.installing; w&&w.addEventListener('statechange',()=>{ if(w.state==='installed'&&navigator.serviceWorker.controller) w.postMessage('skip'); }); }); }).catch(()=>{}); }
 };
 })();

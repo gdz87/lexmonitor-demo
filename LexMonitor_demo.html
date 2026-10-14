@@ -106,6 +106,7 @@ label.row{flex-wrap:nowrap;align-items:flex-start;gap:.6rem}label.row input[type
 .md-out blockquote{border-left:4px solid #a35d00;margin:.5rem 0;padding:.3rem .7rem;opacity:.9}.md-table{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:.5rem 0}
 .md-table table{border-collapse:collapse;min-width:520px;width:100%;font-size:.88rem}.md-table th,.md-table td{border:1px solid rgba(127,127,127,.4);padding:.35rem .45rem;text-align:left;vertical-align:top}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:lmspin .8s linear infinite;vertical-align:-2px}@keyframes lmspin{to{transform:rotate(360deg)}}
+.update-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom));z-index:9999;background:#1f4fa3;color:#fff;padding:.5rem .8rem;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;gap:.6rem;align-items:center;font-weight:600;max-width:92vw}
 
 </style>
 </head>
@@ -493,7 +494,11 @@ LM.boot=function(){
     if(!document.querySelector('.modal-bg')&&!typing&&(/^#\/(solicitudes|tablero)?$/.test(h)||h==='')) LM.route(); else if(/^#\/solicitudes/.test(h)) LM.toast('📨 Hay cambios en las solicitudes del portal'); });
   LM.applyTheme(); buildNav(); window.addEventListener('hashchange',LM.route); LM.route();
   if(LM.startScheduler) LM.startScheduler();
-  if('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.LM_SINGLE){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+  if('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.LM_SINGLE){ const had=!!navigator.serviceWorker.controller; let shown=false;
+    const banner=()=>{ if(shown||!had) return; shown=true; const d=document.createElement('div'); d.className='update-bar'; d.setAttribute('role','alert'); d.innerHTML='🔄 Hay una versión nueva <button class="btn sm primary" id="upd-go">Actualizar</button>'; document.body.appendChild(d); d.querySelector('#upd-go').onclick=()=>location.reload(); };
+    navigator.serviceWorker.addEventListener('controllerchange',banner);
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{ const chk=()=>reg.update().catch(()=>{}); document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') chk(); }); setInterval(chk,30*60*1000);
+      reg.addEventListener('updatefound',()=>{ const w=reg.installing; w&&w.addEventListener('statechange',()=>{ if(w.state==='installed'&&navigator.serviceWorker.controller) w.postMessage('skip'); }); }); }).catch(()=>{}); }
 };
 })();
 
@@ -1043,7 +1048,7 @@ function errMsg(st,body){ const m=(body&&body.error&&body.error.message)||''; co
   else if(st===404||/not found|not supported for generateContent|is not available|no longer available|access to (this|the) model/i.test(m)) t='Modelo no disponible para esta clave ('+LM.gemModel()+').';
   else if(st===403) t='Acceso denegado (403): la clave no tiene permiso para la API de Gemini o está restringida.';
   else if(/token|too long|exceeds|size/i.test(m)&&(st===400||st===413)) t='El texto es demasiado largo para el modelo. Reduzca los documentos o divídalos.';
-  else if(st>=500) t='El servicio de Gemini no está disponible en este momento.';
+  else if(st>=500) t='Google está saturado o no disponible en este momento para este modelo.';
   else t='Error de Gemini.';
   return t+'\n['+gmsg(st,body)+']'; }
 const isModelErr=(st,body)=>{ const m=(body&&body.error&&body.error.message)||''; if(/API_KEY_INVALID|API key not valid/i.test(JSON.stringify(body||{}))) return false;
@@ -1051,7 +1056,7 @@ const isModelErr=(st,body)=>{ const m=(body&&body.error&&body.error.message)||''
 async function call(url,opt){ if(navigator.onLine===false) throw new Error('Sin conexión a internet. Conéctese e intente de nuevo.');
   let res; try{ res=await fetch(url,opt); }catch(e){ throw new Error('No se pudo conectar con Gemini (sin conexión o bloqueado por la red).'); }
   let body=null; try{ body=await res.json(); }catch(e){}
-  if(!res.ok){ const er=new Error(errMsg(res.status,body)); er.status=res.status; er.body=body; er.model=isModelErr(res.status,body); throw er; } return body; }
+  if(!res.ok){ const er=new Error(errMsg(res.status,body)); er.status=res.status; er.body=body; er.model=isModelErr(res.status,body); er.transient=[500,502,503,504].includes(res.status)||/overload|high demand|UNAVAILABLE|try again later/i.test(JSON.stringify(body||{})); throw er; } return body; }
 /* Lista real de modelos de la clave que admiten generateContent, ordenados por preferencia */
 LM.gemList=async function(key){ let out=[], tok='';
   for(let n=0;n<5;n++){ const b=await call(API.replace(/\/$/,'')+'?pageSize=1000&key='+encodeURIComponent(key)+(tok?'&pageToken='+encodeURIComponent(tok):'')); (b.models||[]).forEach(m=>out.push(m)); tok=b.nextPageToken; if(!tok) break; }
@@ -1059,18 +1064,25 @@ LM.gemList=async function(key){ let out=[], tok='';
   const rank=id=>{ const i=PREF.indexOf(id); if(i>=0) return i; return 100+(/flash/.test(id)?0:50)+(/preview|exp/.test(id)?20:0)+(/lite/.test(id)?5:0)-((parseFloat((id.match(/gemini-(\d+(?:\.\d+)?)/)||[])[1])||0)); };
   return ok.sort((a,b)=>rank(a.id)-rank(b.id)); };
 LM.gemPick=async function(key,exclude){ const L=await LM.gemList(key); const c=L.find(m=>!(exclude||[]).includes(m.id)); if(!c) throw new Error('Su clave no tiene ningún modelo Gemini de texto disponible.'); return {pick:c.id,list:L}; };
-LM.gemTest=async function(key){ const {pick,list}=await LM.gemPick(key); let cur=LM.gemModel();
-  if(cur==='auto'||!list.some(m=>m.id===cur)){ cur=pick; setModel(cur); }
-  await call(API+encodeURIComponent(cur)+':generateContent?key='+encodeURIComponent(key),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:'Responde solo: OK'}]}],generationConfig:{maxOutputTokens:20}})}).catch(async e=>{ if(!e.model) throw e; const alt=list.find(m=>m.id!==cur); if(!alt) throw e; cur=alt.id; setModel(cur);
-    await call(API+encodeURIComponent(cur)+':generateContent?key='+encodeURIComponent(key),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:'Responde solo: OK'}]}],generationConfig:{maxOutputTokens:20}})}); });
-  return {model:cur,list}; };
-const gen1=(key,model,prompt)=>call(API+encodeURIComponent(model)+':generateContent?key='+encodeURIComponent(key),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.2}})});
+const gen1=(key,model,prompt,gc)=>call(API+encodeURIComponent(model)+':generateContent?key='+encodeURIComponent(key),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:gc||{temperature:0.2}})});
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+LM.gemOnStatus=null; const status=t=>{ try{ LM.gemOnStatus&&LM.gemOnStatus(t); }catch(e){} };
+/* Reintentos con espera (2 s, 5 s) ante saturación; si persiste o el modelo no está disponible, pasa al siguiente modelo de la lista y lo guarda */
+async function withFallback(key,prompt,opt){ opt=opt||{}; let list=null; const getList=async()=>list=list||await LM.gemList(key);
+  let model=LM.gemModel(); if(model==='auto'||(opt.verify&&!(await getList()).some(m=>m.id===model))){ const L=await getList(); if(!L.length) throw new Error('Su clave no tiene ningún modelo Gemini de texto disponible.'); model=L[0].id; setModel(model); }
+  const tried=[]; let lastErr=null, sat=0;
+  for(let hop=0;hop<5;hop++){ tried.push(model);
+    for(let a=0;a<3;a++){
+      try{ status(a||hop?'Probando con '+model+'…':'Trabajando con Gemini ('+model+')…'); const b=await gen1(key,model,prompt,opt.gc); setModel(model); return {b,model,list}; }
+      catch(e){ lastErr=e; if(e.transient&&a<2){ const w=a?5000:2000; status('Google está saturado, reintentando en '+w/1000+' s… ('+model+')'); await sleep(w); continue; } break; } }
+    if(!(lastErr.transient||lastErr.model)) throw lastErr; if(lastErr.transient) sat++;
+    let L; try{ L=await getList(); }catch(x){ throw lastErr; } const next=L.find(m=>!tried.includes(m.id)); if(!next) break;
+    status((lastErr.transient?'Google sigue saturado':'Modelo no disponible')+' con '+model+'; cambiando a '+next.id+'…'); LM.toast('Cambiando a '+next.id+'…'); model=next.id; }
+  const lit=(lastErr.message.match(/\[Google:[^\]]*\]/)||[''])[0];
+  throw new Error((sat?'Google está saturado en este momento: fallaron todos los modelos probados ('+tried.join(', ')+'). Espere unos minutos e intente de nuevo.':'Ningún modelo disponible respondió ('+tried.join(', ')+').')+'\n'+lit); }
+LM.gemTest=async function(key){ const r=await withFallback(key,'Responde solo: OK',{verify:true,gc:{maxOutputTokens:20}}); const list=r.list||await LM.gemList(key); return {model:r.model,list}; };
 LM.gemRun=async function(prompt){ const key=LM.gemKey(); if(prompt.length>MAXC) throw new Error('El texto es demasiado largo ('+Math.round(prompt.length/1000)+' mil caracteres; máximo '+MAXC/1000+' mil). Reduzca los documentos o divídalos.');
-  let model=LM.gemModel(), b, tried=[];
-  if(model==='auto'){ model=(await LM.gemPick(key)).pick; setModel(model); }
-  for(let n=0;;n++){ tried.push(model);
-    try{ b=await gen1(key,model,prompt); break; }
-    catch(e){ if(!e.model||n>=2) throw e; let p; try{ p=await LM.gemPick(key,tried); }catch(x){ throw e; } model=p.pick; setModel(model); LM.toast('Modelo no disponible; reintentando con '+model+'…'); } }
+  const {b}=await withFallback(key,prompt);
   const c=b&&b.candidates&&b.candidates[0]; const t=c&&c.content&&(c.content.parts||[]).map(p=>p.thought?'':(p.text||'')).join('');
   if(!t){ const why=(b&&b.promptFeedback&&b.promptFeedback.blockReason)||(c&&c.finishReason)||'sin texto'; throw new Error('Gemini no devolvió resultado ('+why+'). Ajuste el texto e intente de nuevo.'); }
   return t+(c.finishReason==='MAX_TOKENS'?'\n\n> ⚠ Respuesta cortada por longitud máxima.':''); };
@@ -1152,10 +1164,10 @@ LM.iaAttach=function(el,getKey,getPid,getPrompt,getTitle){ const box=document.cr
       p.notas=(p.notas?p.notas+'\n\n':'')+'--- IA: '+title+' ('+new Date().toLocaleString('es-CO')+')'+(sim?' [SIMULACIÓN]':'')+' — revisar ---\n'+cur(); LM.save(); LM.toast('Guardado en Notas del proceso ✓'); }; };
   async function exec(prompt,simText,title,btn){ const st=box.querySelector('#ia-st');
     if(!LM.gemKey()){ st.textContent='Simulación (sin clave)'; return show(simText,true,title); }
-    btn.disabled=true; st.innerHTML='<span class="spin" aria-hidden="true"></span> Trabajando con Gemini… puede tardar hasta un minuto';
+    btn.disabled=true; st.innerHTML='<span class="spin" aria-hidden="true"></span> Trabajando con Gemini… puede tardar hasta un minuto'; LM.gemOnStatus=t=>st.innerHTML='<span class="spin" aria-hidden="true"></span> '+E(t);
     try{ const t=await LM.gemRun(prompt); st.textContent='✓ Listo'; show(t,false,title); }
     catch(e){ st.textContent=''; box.querySelector('#ia-res').innerHTML='<div class="card" style="border-color:#c0392b;margin-top:1rem"><b>❌ No se pudo completar.</b><p class="small">'+E(e.message)+'</p></div>'; }
-    finally{ btn.disabled=false; } }
+    finally{ btn.disabled=false; LM.gemOnStatus=null; } }
   function run(){ const key=getKey(), two=key==='comparar'; const A=docs.A.trim(), B=docs.B.trim();
     if(!A||(two&&!B)) return LM.toast(two?'Cargue los dos documentos (A y B)':'Cargue o pegue al menos un documento');
     const base=getPrompt().split('\n').filter(l=>!/\[Pegue aquí/.test(l)&&!/^(DOCUMENTOS?|DOCUMENTO [AB])\s*$/.test(l.trim())).join('\n');
@@ -1177,8 +1189,8 @@ const origC=V.config; V.config=function(el,args){ origC(el,args); const k=LM.gem
   $('#cf-gm').onchange=e=>{ $('#cf-gmo').classList.toggle('hide',e.target.value!=='__otro'); if(e.target.value!=='__otro') saveK(); };
   $('#cf-gkv').onclick=()=>{ const i=$('#cf-gk'); i.type=i.type==='password'?'text':'password'; };
   $('#cf-gs').onclick=()=>{ const v=saveK(); msg(v?'<span class="chip ok">Clave guardada</span>':'<span class="chip">Sin clave</span>'); LM.toast(v?'Clave guardada en este navegador ✓':'Sin clave: modo simulación'); };
-  $('#cf-gt').onclick=async()=>{ const v=saveK(); if(!v) return msg('<span class="chip warn">Pegue primero una clave</span>'); msg('<span class="spin"></span> Probando…');
-    try{ const r=await LM.gemTest(v); fill(r.list,r.model); msg('<span class="chip ok">✓ Conexión correcta</span> Modelo en uso: <b>'+E(r.model)+'</b> ('+r.list.length+' modelos disponibles)'); }catch(e){ msg('<span class="chip warn">Error</span> '+E(e.message).replace(/\n/g,'<br>')); } };
+  $('#cf-gt').onclick=async()=>{ const v=saveK(); if(!v) return msg('<span class="chip warn">Pegue primero una clave</span>'); msg('<span class="spin"></span> Probando…'); LM.gemOnStatus=t=>msg('<span class="spin"></span> '+E(t));
+    try{ const r=await LM.gemTest(v); fill(r.list,r.model); msg('<span class="chip ok">✓ Conexión correcta</span> Modelo en uso: <b>'+E(r.model)+'</b> ('+r.list.length+' modelos disponibles)'); }catch(e){ msg('<span class="chip warn">Error</span> '+E(e.message).replace(/\n/g,'<br>')); } LM.gemOnStatus=null; };
   $('#cf-gd').onclick=()=>{ if(!confirm('¿Borrar la clave de API de este navegador?')) return; try{ localStorage.removeItem(KK); }catch(e){} $('#cf-gk').value=''; msg('<span class="chip">Clave borrada: modo simulación</span>'); LM.toast('Clave borrada'); };
 };
 })();
