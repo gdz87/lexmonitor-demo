@@ -32,3 +32,6 @@ CONEXIÓN CON EL SITIO WEB (/sitio/) — SOLO DEMO
 - Analizar con IA tiene dos modos: "Analizar / comparar documentos" y "Generar documento" (tipo + proceso + instrucciones; faltantes como [COMPLETAR: ...]). Resultado editable (✎ Editar) antes de exportar.
 - Configuración > "Plantillas con membrete (Word)": .docx guardados en IndexedDB 'lexmonitor-membretes'; vista previa, predeterminada, eliminar. Marcador opcional {{CONTENIDO}}.
 - "📄 Exportar a Word" (JSZip CDN) en resultados de IA y en Borradores > Plantillas; conserva encabezado, pie, márgenes y estilos. Sin plantilla: genérica con el nombre de la firma.
+
+=== Versión 6 ===
+- Modelo Gemini automático: lista real de modelos de la clave (GET v1beta/models), preferencia flash vigentes (3.x primero; Google limita 2.5 a proyectos antiguos) y reintento automático ante error de modelo. Errores muestran el mensaje literal de Google.
