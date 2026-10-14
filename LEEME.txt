@@ -36,3 +36,4 @@ CONEXIÓN CON EL SITIO WEB (/sitio/) — SOLO DEMO
 === Versión 6 ===
 - Modelo Gemini automático: lista real de modelos de la clave (GET v1beta/models), preferencia flash vigentes (3.x primero; Google limita 2.5 a proyectos antiguos) y reintento automático ante error de modelo. Errores muestran el mensaje literal de Google.
 - v7: reintentos 2 s/5 s ante 503/saturación y cambio automático de modelo; SW red-primero con aviso "Hay una versión nueva · Actualizar".
+- v8: 429 por minuto con cuenta regresiva (RetryInfo/retry in Ns) y un reintento; cuota diaria o espera >30 s cambia de modelo; Probar conexión no gasta cuota si un modelo funcionó en las últimas 6 h.

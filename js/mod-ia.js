@@ -26,7 +26,7 @@ const isModelErr=(st,body)=>{ const m=(body&&body.error&&body.error.message)||''
 async function call(url,opt){ if(navigator.onLine===false) throw new Error('Sin conexión a internet. Conéctese e intente de nuevo.');
   let res; try{ res=await fetch(url,opt); }catch(e){ throw new Error('No se pudo conectar con Gemini (sin conexión o bloqueado por la red).'); }
   let body=null; try{ body=await res.json(); }catch(e){}
-  if(!res.ok){ const er=new Error(errMsg(res.status,body)); er.status=res.status; er.body=body; er.model=isModelErr(res.status,body); er.transient=[500,502,503,504].includes(res.status)||/overload|high demand|UNAVAILABLE|try again later/i.test(JSON.stringify(body||{})); throw er; } return body; }
+  if(!res.ok){ const er=new Error(errMsg(res.status,body)); er.status=res.status; er.body=body; er.model=isModelErr(res.status,body); er.rate=res.status===429&&!er.model; er.transient=[500,502,503,504].includes(res.status)||/overload|high demand|UNAVAILABLE|try again later/i.test(JSON.stringify(body||{})); throw er; } return body; }
 /* Lista real de modelos de la clave que admiten generateContent, ordenados por preferencia */
 LM.gemList=async function(key){ let out=[], tok='';
   for(let n=0;n<5;n++){ const b=await call(API.replace(/\/$/,'')+'?pageSize=1000&key='+encodeURIComponent(key)+(tok?'&pageToken='+encodeURIComponent(tok):'')); (b.models||[]).forEach(m=>out.push(m)); tok=b.nextPageToken; if(!tok) break; }
@@ -35,6 +35,13 @@ LM.gemList=async function(key){ let out=[], tok='';
   return ok.sort((a,b)=>rank(a.id)-rank(b.id)); };
 LM.gemPick=async function(key,exclude){ const L=await LM.gemList(key); const c=L.find(m=>!(exclude||[]).includes(m.id)); if(!c) throw new Error('Su clave no tiene ningún modelo Gemini de texto disponible.'); return {pick:c.id,list:L}; };
 const gen1=(key,model,prompt,gc)=>call(API+encodeURIComponent(model)+':generateContent?key='+encodeURIComponent(key),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:gc||{temperature:0.2}})});
+const KOK='lm_gemini_ok'; const okModel=m=>{ setModel(m); try{ localStorage.setItem(KOK,JSON.stringify({m,t:Date.now()})); }catch(e){} };
+const recentOk=()=>{ try{ const o=JSON.parse(localStorage.getItem(KOK)||'null'); return o&&Date.now()-o.t<6*3600*1000?o.m:null; }catch(e){ return null; } };
+/* 429: ¿cuota diaria? ¿cuántos segundos esperar? (RetryInfo.retryDelay o 'retry in Ns') */
+function quotaInfo(body){ const e=(body&&body.error)||{}; const det=e.details||[]; const txt=JSON.stringify(det)+' '+(e.message||'');
+  let wait=null; const ri=det.find(d=>/RetryInfo/.test(d['@type']||'')); if(ri&&ri.retryDelay) wait=parseFloat(ri.retryDelay);
+  if(wait==null){ const m=(e.message||'').match(/retry in ([\d.]+)\s*s/i); if(m) wait=parseFloat(m[1]); }
+  return {daily:/PerDay|per day|daily/i.test(txt),wait}; }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 LM.gemOnStatus=null; const status=t=>{ try{ LM.gemOnStatus&&LM.gemOnStatus(t); }catch(e){} };
 /* Reintentos con espera (2 s, 5 s) ante saturación; si persiste o el modelo no está disponible, pasa al siguiente modelo de la lista y lo guarda */
@@ -43,14 +50,19 @@ async function withFallback(key,prompt,opt){ opt=opt||{}; let list=null; const g
   const tried=[]; let lastErr=null, sat=0;
   for(let hop=0;hop<5;hop++){ tried.push(model);
     for(let a=0;a<3;a++){
-      try{ status(a||hop?'Probando con '+model+'…':'Trabajando con Gemini ('+model+')…'); const b=await gen1(key,model,prompt,opt.gc); setModel(model); return {b,model,list}; }
-      catch(e){ lastErr=e; if(e.transient&&a<2){ const w=a?5000:2000; status('Google está saturado, reintentando en '+w/1000+' s… ('+model+')'); await sleep(w); continue; } break; } }
-    if(!(lastErr.transient||lastErr.model)) throw lastErr; if(lastErr.transient) sat++;
+      try{ status(a||hop?'Probando con '+model+'…':'Trabajando con Gemini ('+model+')…'); const b=await gen1(key,model,prompt,opt.gc); okModel(model); return {b,model,list}; }
+      catch(e){ lastErr=e;
+        if(e.rate){ const q=quotaInfo(e.body); if(!q.daily&&q.wait!=null&&q.wait<=30&&!e.waited){ e.waited=true; for(let k=Math.ceil(q.wait)+1;k>0;k--){ status('Límite por minuto de Google, reintentando en '+k+' s… ('+model+')'); await sleep(1000); } try{ status('Reintentando con '+model+'…'); const b=await gen1(key,model,prompt,opt.gc); okModel(model); return {b,model,list}; }catch(e2){ lastErr=e2; } }
+          lastErr.switchQ=q.daily?'Cuota diaria agotada':'Límite por minuto de Google'; break; }
+        if(e.transient&&a<2){ const w=a?5000:2000; status('Google está saturado, reintentando en '+w/1000+' s… ('+model+')'); await sleep(w); continue; } break; } }
+    if(!(lastErr.transient||lastErr.model||lastErr.rate)) throw lastErr; if(lastErr.transient) sat++;
     let L; try{ L=await getList(); }catch(x){ throw lastErr; } const next=L.find(m=>!tried.includes(m.id)); if(!next) break;
-    status((lastErr.transient?'Google sigue saturado':'Modelo no disponible')+' con '+model+'; cambiando a '+next.id+'…'); LM.toast('Cambiando a '+next.id+'…'); model=next.id; }
+    status((lastErr.switchQ||(lastErr.transient?'Google sigue saturado':'Modelo no disponible'))+' con '+model+'; cambiando a '+next.id+'…'); LM.toast('Cambiando a '+next.id+'…'); model=next.id; }
   const lit=(lastErr.message.match(/\[Google:[^\]]*\]/)||[''])[0];
-  throw new Error((sat?'Google está saturado en este momento: fallaron todos los modelos probados ('+tried.join(', ')+'). Espere unos minutos e intente de nuevo.':'Ningún modelo disponible respondió ('+tried.join(', ')+').')+'\n'+lit); }
-LM.gemTest=async function(key){ const r=await withFallback(key,'Responde solo: OK',{verify:true,gc:{maxOutputTokens:20}}); const list=r.list||await LM.gemList(key); return {model:r.model,list}; };
+  throw new Error((lastErr.rate?'Se alcanzaron los límites gratuitos de Google en los modelos probados ('+tried.join(', ')+'). Espere un minuto (o hasta mañana si es la cuota diaria).':sat?'Google está saturado en este momento: fallaron todos los modelos probados ('+tried.join(', ')+'). Espere unos minutos e intente de nuevo.':'Ningún modelo disponible respondió ('+tried.join(', ')+').')+'\n'+lit); }
+LM.gemTest=async function(key){ const ok=recentOk(), cur=LM.gemModel();
+  if(ok&&(cur==='auto'||cur===ok)){ const list=await LM.gemList(key); if(list.some(m=>m.id===ok)){ setModel(ok); return {model:ok,list,cached:true}; } }
+  const r=await withFallback(key,'Responde solo: OK',{verify:true,gc:{maxOutputTokens:20}}); const list=r.list||await LM.gemList(key); return {model:r.model,list}; };
 LM.gemRun=async function(prompt){ const key=LM.gemKey(); if(prompt.length>MAXC) throw new Error('El texto es demasiado largo ('+Math.round(prompt.length/1000)+' mil caracteres; máximo '+MAXC/1000+' mil). Reduzca los documentos o divídalos.');
   const {b}=await withFallback(key,prompt);
   const c=b&&b.candidates&&b.candidates[0]; const t=c&&c.content&&(c.content.parts||[]).map(p=>p.thought?'':(p.text||'')).join('');
@@ -160,7 +172,7 @@ const origC=V.config; V.config=function(el,args){ origC(el,args); const k=LM.gem
   $('#cf-gkv').onclick=()=>{ const i=$('#cf-gk'); i.type=i.type==='password'?'text':'password'; };
   $('#cf-gs').onclick=()=>{ const v=saveK(); msg(v?'<span class="chip ok">Clave guardada</span>':'<span class="chip">Sin clave</span>'); LM.toast(v?'Clave guardada en este navegador ✓':'Sin clave: modo simulación'); };
   $('#cf-gt').onclick=async()=>{ const v=saveK(); if(!v) return msg('<span class="chip warn">Pegue primero una clave</span>'); msg('<span class="spin"></span> Probando…'); LM.gemOnStatus=t=>msg('<span class="spin"></span> '+E(t));
-    try{ const r=await LM.gemTest(v); fill(r.list,r.model); msg('<span class="chip ok">✓ Conexión correcta</span> Modelo en uso: <b>'+E(r.model)+'</b> ('+r.list.length+' modelos disponibles)'); }catch(e){ msg('<span class="chip warn">Error</span> '+E(e.message).replace(/\n/g,'<br>')); } LM.gemOnStatus=null; };
+    try{ const r=await LM.gemTest(v); fill(r.list,r.model); msg('<span class="chip ok">✓ Conexión correcta</span> Modelo en uso: <b>'+E(r.model)+'</b> ('+r.list.length+' modelos disponibles'+(r.cached?'; funcionó en las últimas horas, no se gastó cuota':'')+')'); }catch(e){ msg('<span class="chip warn">Error</span> '+E(e.message).replace(/\n/g,'<br>')); } LM.gemOnStatus=null; };
   $('#cf-gd').onclick=()=>{ if(!confirm('¿Borrar la clave de API de este navegador?')) return; try{ localStorage.removeItem(KK); }catch(e){} $('#cf-gk').value=''; msg('<span class="chip">Clave borrada: modo simulación</span>'); LM.toast('Clave borrada'); };
 };
 })();
