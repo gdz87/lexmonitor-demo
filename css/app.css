@@ -91,3 +91,8 @@ label.row{flex-wrap:nowrap;align-items:flex-start;gap:.6rem}label.row input[type
 .sol.nueva{border-left:4px solid var(--danger)}.sol.en_tramite{border-left:4px solid var(--warn)}.sol.respondida{border-left:4px solid var(--ok)}
 .prompt-out{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;min-height:50vh;width:100%}
 .pub-act{border:1px solid var(--border);border-radius:12px;padding:.7rem;margin-bottom:.6rem}.pub-act.on{border-color:var(--ok)}
+/* Análisis IA */
+.md-out{margin-top:.6rem;overflow-wrap:anywhere}.md-out h2,.md-out h3,.md-out h4{margin:.9rem 0 .4rem}.md-out pre{white-space:pre-wrap;background:rgba(127,127,127,.12);padding:.6rem;border-radius:8px}
+.md-out blockquote{border-left:4px solid #a35d00;margin:.5rem 0;padding:.3rem .7rem;opacity:.9}.md-table{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:.5rem 0}
+.md-table table{border-collapse:collapse;min-width:520px;width:100%;font-size:.88rem}.md-table th,.md-table td{border:1px solid rgba(127,127,127,.4);padding:.35rem .45rem;text-align:left;vertical-align:top}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:lmspin .8s linear infinite;vertical-align:-2px}@keyframes lmspin{to{transform:rotate(360deg)}}

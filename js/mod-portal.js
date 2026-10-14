@@ -64,9 +64,10 @@ function iaView(el,pid,key){ const S=LM.state; key=key||'contestacion';
    '<label class="row" style="font-weight:500"><input type="checkbox" id="ia-fill" checked> Rellenar automáticamente con los datos del proceso</label><label class="row" style="font-weight:500"><input type="checkbox" id="ia-anon" checked> Anonimizar cliente y radicado</label></div>'+
    '<div class="card"><div class="row between"><h2 id="ia-t"></h2><button class="btn primary" id="ia-copy">📋 Copiar</button></div><label for="ia-out" class="small muted">Instrucción (editable)</label><textarea id="ia-out" class="prompt-out"></textarea></div></div>');
   const gen=()=>{ const p=LM.proc(el.querySelector('#ia-p').value); el.querySelector('#ia-t').textContent=P.find(x=>x[0]===key)[1]; el.querySelector('#ia-out').value=LM.buildPrompt(key,p,{fill:el.querySelector('#ia-fill').checked,anon:el.querySelector('#ia-anon').checked}); };
-  el.querySelectorAll('[data-pk]').forEach(b=>b.onclick=()=>{ key=b.dataset.pk; el.querySelectorAll('[data-pk]').forEach(x=>x.classList.toggle('primary',x===b)); history.replaceState(null,'','#/borradores/'+el.querySelector('#ia-p').value+'/@ia/'+key); gen(); });
+  el.querySelectorAll('[data-pk]').forEach(b=>b.onclick=()=>{ key=b.dataset.pk; el.querySelectorAll('[data-pk]').forEach(x=>x.classList.toggle('primary',x===b)); history.replaceState(null,'','#/borradores/'+el.querySelector('#ia-p').value+'/@ia/'+key); gen(); el._iaDraw&&el._iaDraw(); });
   el.querySelectorAll('#ia-p,#ia-fill,#ia-anon').forEach(x=>x.onchange=gen); gen();
   el.querySelector('#ia-copy').onclick=()=>{ const t=el.querySelector('#ia-out'); (navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(()=>LM.toast('Instrucción copiada ✓'),()=>{ t.select(); try{document.execCommand('copy');LM.toast('Instrucción copiada ✓');}catch(e){LM.toast('Seleccione y copie manualmente');} }); };
+  el._iaDraw=LM.iaAttach&&LM.iaAttach(el,()=>key,()=>el.querySelector('#ia-p').value,()=>el.querySelector('#ia-out').value,()=>P.find(x=>x[0]===key)[1]);
 }
 function jurisView(el,pid){ const S=LM.state;
   el.insertAdjacentHTML('beforeend','<div class="card no-print" style="margin-bottom:1rem"><label for="jb-p">Proceso</label><select id="jb-p">'+S.procesos.map(p=>'<option value="'+p.id+'"'+(p.id===pid?' selected':'')+'>'+LM.fmtRad(p.radicado).slice(0,24)+' · '+E(p.medio)+' ('+(p.jurisprudencia||[]).length+' fichas)</option>').join('')+'</select><p class="small muted" style="margin-top:.5rem">También disponible en la pestaña «Jurisprudencia» de cada proceso.</p></div><div id="jb"></div>');
@@ -76,7 +77,7 @@ const origB=V.borradores;
 V.borradores=function(el,args){ const S=LM.state; const pid=args[0]&&LM.proc(args[0])?args[0]:S.procesos[0].id; const mode=args[1]||'';
   const nav='<nav class="subnav no-print" aria-label="Secciones de borradores"><a class="btn sm'+(mode[0]!=='@'?' active':'')+'" href="#/borradores/'+pid+'">📝 Plantillas</a><a class="btn sm'+(mode==='@juris'?' active':'')+'" href="#/borradores/'+pid+'/@juris">📚 Fichas de jurisprudencia</a><a class="btn sm'+(mode==='@ia'?' active':'')+'" href="#/borradores/'+pid+'/@ia">🤖 Instrucciones para IA</a></nav>';
   if(mode==='@juris'){ el.innerHTML='<h1>Fichas de jurisprudencia</h1>'+nav; return jurisView(el,pid); }
-  if(mode==='@ia'){ el.innerHTML='<h1>Biblioteca de instrucciones para IA</h1>'+nav+'<p class="small muted">Instrucciones (prompts) listas para copiar en la herramienta de IA que use la firma. Siempre revise el resultado: la IA puede equivocarse.</p>'; return iaView(el,pid,args[2]); }
+  if(mode==='@ia'){ el.innerHTML='<h1>Biblioteca de instrucciones para IA</h1>'+nav+'<p class="small muted">Instrucciones (prompts) listas para copiar en la herramienta de IA que use la firma, o para ejecutar aquí mismo con ⚡ Analizar con IA (Google Gemini). Siempre revise el resultado: la IA puede equivocarse.</p>'; return iaView(el,pid,args[2]); }
   origB(el,args); const h=el.querySelector('h1'); h.insertAdjacentHTML('afterend',nav); };
 
 /* ================= PORTAL: PUBLICACIÓN POR PROCESO / ACTUACIÓN ================= */

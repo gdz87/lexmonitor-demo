@@ -101,6 +101,11 @@ label.row{flex-wrap:nowrap;align-items:flex-start;gap:.6rem}label.row input[type
 .sol.nueva{border-left:4px solid var(--danger)}.sol.en_tramite{border-left:4px solid var(--warn)}.sol.respondida{border-left:4px solid var(--ok)}
 .prompt-out{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;min-height:50vh;width:100%}
 .pub-act{border:1px solid var(--border);border-radius:12px;padding:.7rem;margin-bottom:.6rem}.pub-act.on{border-color:var(--ok)}
+/* Análisis IA */
+.md-out{margin-top:.6rem;overflow-wrap:anywhere}.md-out h2,.md-out h3,.md-out h4{margin:.9rem 0 .4rem}.md-out pre{white-space:pre-wrap;background:rgba(127,127,127,.12);padding:.6rem;border-radius:8px}
+.md-out blockquote{border-left:4px solid #a35d00;margin:.5rem 0;padding:.3rem .7rem;opacity:.9}.md-table{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:.5rem 0}
+.md-table table{border-collapse:collapse;min-width:520px;width:100%;font-size:.88rem}.md-table th,.md-table td{border:1px solid rgba(127,127,127,.4);padding:.35rem .45rem;text-align:left;vertical-align:top}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:lmspin .8s linear infinite;vertical-align:-2px}@keyframes lmspin{to{transform:rotate(360deg)}}
 
 </style>
 </head>
@@ -951,9 +956,10 @@ function iaView(el,pid,key){ const S=LM.state; key=key||'contestacion';
    '<label class="row" style="font-weight:500"><input type="checkbox" id="ia-fill" checked> Rellenar automáticamente con los datos del proceso</label><label class="row" style="font-weight:500"><input type="checkbox" id="ia-anon" checked> Anonimizar cliente y radicado</label></div>'+
    '<div class="card"><div class="row between"><h2 id="ia-t"></h2><button class="btn primary" id="ia-copy">📋 Copiar</button></div><label for="ia-out" class="small muted">Instrucción (editable)</label><textarea id="ia-out" class="prompt-out"></textarea></div></div>');
   const gen=()=>{ const p=LM.proc(el.querySelector('#ia-p').value); el.querySelector('#ia-t').textContent=P.find(x=>x[0]===key)[1]; el.querySelector('#ia-out').value=LM.buildPrompt(key,p,{fill:el.querySelector('#ia-fill').checked,anon:el.querySelector('#ia-anon').checked}); };
-  el.querySelectorAll('[data-pk]').forEach(b=>b.onclick=()=>{ key=b.dataset.pk; el.querySelectorAll('[data-pk]').forEach(x=>x.classList.toggle('primary',x===b)); history.replaceState(null,'','#/borradores/'+el.querySelector('#ia-p').value+'/@ia/'+key); gen(); });
+  el.querySelectorAll('[data-pk]').forEach(b=>b.onclick=()=>{ key=b.dataset.pk; el.querySelectorAll('[data-pk]').forEach(x=>x.classList.toggle('primary',x===b)); history.replaceState(null,'','#/borradores/'+el.querySelector('#ia-p').value+'/@ia/'+key); gen(); el._iaDraw&&el._iaDraw(); });
   el.querySelectorAll('#ia-p,#ia-fill,#ia-anon').forEach(x=>x.onchange=gen); gen();
   el.querySelector('#ia-copy').onclick=()=>{ const t=el.querySelector('#ia-out'); (navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(()=>LM.toast('Instrucción copiada ✓'),()=>{ t.select(); try{document.execCommand('copy');LM.toast('Instrucción copiada ✓');}catch(e){LM.toast('Seleccione y copie manualmente');} }); };
+  el._iaDraw=LM.iaAttach&&LM.iaAttach(el,()=>key,()=>el.querySelector('#ia-p').value,()=>el.querySelector('#ia-out').value,()=>P.find(x=>x[0]===key)[1]);
 }
 function jurisView(el,pid){ const S=LM.state;
   el.insertAdjacentHTML('beforeend','<div class="card no-print" style="margin-bottom:1rem"><label for="jb-p">Proceso</label><select id="jb-p">'+S.procesos.map(p=>'<option value="'+p.id+'"'+(p.id===pid?' selected':'')+'>'+LM.fmtRad(p.radicado).slice(0,24)+' · '+E(p.medio)+' ('+(p.jurisprudencia||[]).length+' fichas)</option>').join('')+'</select><p class="small muted" style="margin-top:.5rem">También disponible en la pestaña «Jurisprudencia» de cada proceso.</p></div><div id="jb"></div>');
@@ -963,7 +969,7 @@ const origB=V.borradores;
 V.borradores=function(el,args){ const S=LM.state; const pid=args[0]&&LM.proc(args[0])?args[0]:S.procesos[0].id; const mode=args[1]||'';
   const nav='<nav class="subnav no-print" aria-label="Secciones de borradores"><a class="btn sm'+(mode[0]!=='@'?' active':'')+'" href="#/borradores/'+pid+'">📝 Plantillas</a><a class="btn sm'+(mode==='@juris'?' active':'')+'" href="#/borradores/'+pid+'/@juris">📚 Fichas de jurisprudencia</a><a class="btn sm'+(mode==='@ia'?' active':'')+'" href="#/borradores/'+pid+'/@ia">🤖 Instrucciones para IA</a></nav>';
   if(mode==='@juris'){ el.innerHTML='<h1>Fichas de jurisprudencia</h1>'+nav; return jurisView(el,pid); }
-  if(mode==='@ia'){ el.innerHTML='<h1>Biblioteca de instrucciones para IA</h1>'+nav+'<p class="small muted">Instrucciones (prompts) listas para copiar en la herramienta de IA que use la firma. Siempre revise el resultado: la IA puede equivocarse.</p>'; return iaView(el,pid,args[2]); }
+  if(mode==='@ia'){ el.innerHTML='<h1>Biblioteca de instrucciones para IA</h1>'+nav+'<p class="small muted">Instrucciones (prompts) listas para copiar en la herramienta de IA que use la firma, o para ejecutar aquí mismo con ⚡ Analizar con IA (Google Gemini). Siempre revise el resultado: la IA puede equivocarse.</p>'; return iaView(el,pid,args[2]); }
   origB(el,args); const h=el.querySelector('h1'); h.insertAdjacentHTML('afterend',nav); };
 
 /* ================= PORTAL: PUBLICACIÓN POR PROCESO / ACTUACIÓN ================= */
@@ -1012,6 +1018,117 @@ V.solicitudes=function(el,args){ const S=LM.state; const d=SH.load(); const f=ar
   el.querySelectorAll('[data-att]').forEach(b=>b.onclick=async()=>{ try{ const blob=await SH.fileGet(b.dataset.att); if(!blob) return LM.toast('Archivo no disponible en este navegador'); LM.download(b.dataset.n,blob); }catch(e){ LM.toast('No se pudo abrir'); } });
 };
 const origA=V.alertas; V.alertas=function(el,args){ origA(el,args); const n=SH.countNuevas(); if(n){ const h=el.querySelector('h1'); h&&h.insertAdjacentHTML('afterend','<a class="card item row between" href="#/solicitudes/nueva" style="margin:.5rem 0"><span>📨 Tiene <b>'+n+'</b> solicitud'+(n>1?'es':'')+' nueva'+(n>1?'s':'')+' del portal</span><span class="btn sm primary">Ver bandeja</span></a>'); } };
+})();
+
+</script>
+<script>
+/* Análisis con IA (Google Gemini): clave en localStorage, carga de documentos, ejecución de instrucciones, simulación sin clave */
+(function(){
+const LM=window.LM, V=LM.views, E=LM.esc;
+const KK='lm_gemini_key', KM='lm_gemini_model', DEF_MODEL='gemini-2.5-flash', MAXC=500000;
+const API='https://generativelanguage.googleapis.com/v1beta/models/';
+LM.gemKey=()=>{ try{ return localStorage.getItem(KK)||''; }catch(e){ return ''; } };
+LM.gemModel=()=>{ try{ return localStorage.getItem(KM)||DEF_MODEL; }catch(e){ return DEF_MODEL; } };
+const AVISO='<div class="card conf" style="margin:.6rem 0"><b>⚠ Antes de usar la IA.</b> <span class="small">En el plan gratuito de Google Gemini, Google puede usar los datos enviados para mejorar sus productos. <b>No suba documentos con datos reales de clientes</b>: anonimícelos primero. <b>Revise siempre el resultado</b>: la IA puede equivocarse u omitir información.</span></div>';
+/* ---------- Errores ---------- */
+function errMsg(st,body){ const m=(body&&body.error&&body.error.message)||''; const r=JSON.stringify(body||{});
+  if(st===429) return 'Cuota excedida (429): se alcanzó el límite gratuito de solicitudes o de tokens de Gemini. Espere un minuto (o hasta mañana si es el límite diario) e intente de nuevo.';
+  if(/API_KEY_INVALID|API key not valid|API key expired/i.test(r)||st===401) return 'Clave de API inválida o vencida. Revísela en Configuración → Inteligencia artificial.';
+  if(st===403) return 'Acceso denegado (403): la clave no tiene permiso para la API de Gemini o está restringida. Genere una nueva en aistudio.google.com/apikey.';
+  if(/token|too long|exceeds|size/i.test(m)&&(st===400||st===413)) return 'El texto es demasiado largo para el modelo. Reduzca los documentos o divídalos.';
+  if(st===404) return 'Modelo no disponible ('+LM.gemModel()+'). Pruebe la conexión en Configuración.';
+  if(st>=500) return 'El servicio de Gemini no está disponible en este momento ('+st+'). Intente más tarde.';
+  return 'Error '+st+': '+(m||'respuesta inesperada de Gemini');
+}
+async function call(url,opt){ if(navigator.onLine===false) throw new Error('Sin conexión a internet. Conéctese e intente de nuevo.');
+  let res; try{ res=await fetch(url,opt); }catch(e){ throw new Error('No se pudo conectar con Gemini (sin conexión o bloqueado por la red).'); }
+  let body=null; try{ body=await res.json(); }catch(e){}
+  if(!res.ok) throw new Error(errMsg(res.status,body)); return body; }
+LM.gemTest=async function(key){ const b=await call(API+encodeURIComponent(LM.gemModel())+'?key='+encodeURIComponent(key)); return b&&(b.displayName||b.name); };
+LM.gemRun=async function(prompt){ const key=LM.gemKey(); if(prompt.length>MAXC) throw new Error('El texto es demasiado largo ('+Math.round(prompt.length/1000)+' mil caracteres; máximo '+MAXC/1000+' mil). Reduzca los documentos o divídalos.');
+  const b=await call(API+encodeURIComponent(LM.gemModel())+':generateContent?key='+encodeURIComponent(key),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.2}})});
+  const c=b&&b.candidates&&b.candidates[0]; const t=c&&c.content&&(c.content.parts||[]).map(p=>p.text||'').join('');
+  if(!t){ const why=(b&&b.promptFeedback&&b.promptFeedback.blockReason)||(c&&c.finishReason)||'sin texto'; throw new Error('Gemini no devolvió resultado ('+why+'). Ajuste el texto e intente de nuevo.'); }
+  return t+(c.finishReason==='MAX_TOKENS'?'\n\n> ⚠ Respuesta cortada por longitud máxima.':''); };
+/* ---------- Markdown mínimo y seguro ---------- */
+function inl(s){ return E(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/__([^_]+)__/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g,'$1<i>$2</i>'); }
+LM.md=function(src){ const L=String(src).replace(/\r/g,'').split('\n'); let h='',i=0;
+  const cells=r=>r.trim().replace(/^\||\|$/g,'').split('|').map(x=>x.trim());
+  while(i<L.length){ const l=L[i];
+    if(/^```/.test(l)){ let b=[]; i++; while(i<L.length&&!/^```/.test(L[i])) b.push(L[i++]); i++; h+='<pre>'+E(b.join('\n'))+'</pre>'; continue; }
+    if(/^\s*\|/.test(l)&&i+1<L.length&&/^\s*\|?\s*:?-{2,}/.test(L[i+1])){ const hd=cells(l); i+=2; let rows=[]; while(i<L.length&&/^\s*\|/.test(L[i])) rows.push(cells(L[i++]));
+      h+='<div class="md-table"><table><thead><tr>'+hd.map(c=>'<th>'+inl(c)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(c=>'<td>'+inl(c).replace(/&lt;br\s*\/?&gt;/g,'<br>')+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'; continue; }
+    let m;
+    if((m=l.match(/^(#{1,6})\s+(.*)/))){ const n=Math.min(m[1].length+1,4); h+='<h'+n+'>'+inl(m[2])+'</h'+n+'>'; i++; continue; }
+    if(/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(l)){ h+='<hr>'; i++; continue; }
+    if(/^>\s?/.test(l)){ let b=[]; while(i<L.length&&/^>\s?/.test(L[i])) b.push(L[i++].replace(/^>\s?/,'')); h+='<blockquote>'+b.map(inl).join('<br>')+'</blockquote>'; continue; }
+    if(/^\s*([-*+]|\d+[.)])\s+/.test(l)){ const ol=/^\s*\d/.test(l); let b=[]; while(i<L.length&&/^\s*([-*+]|\d+[.)])\s+/.test(L[i])) b.push(L[i++].replace(/^\s*([-*+]|\d+[.)])\s+/,'')); h+=(ol?'<ol>':'<ul>')+b.map(x=>'<li>'+inl(x)+'</li>').join('')+(ol?'</ol>':'</ul>'); continue; }
+    if(!l.trim()){ i++; continue; }
+    let b=[]; while(i<L.length&&L[i].trim()&&!/^(#{1,6}\s|```|>|\s*\||\s*([-*+]|\d+[.)])\s)/.test(L[i])) b.push(L[i++]); if(!b.length) b.push(L[i++]); h+='<p>'+b.map(inl).join('<br>')+'</p>'; }
+  return h; };
+/* ---------- Lectura de archivos ---------- */
+const CDN={pdf:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',pdfw:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',docx:'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js'};
+const loaded={}; function load(u){ return loaded[u]=loaded[u]||new Promise((ok,ko)=>{ const s=document.createElement('script'); s.src=u; s.onload=ok; s.onerror=()=>{ delete loaded[u]; ko(new Error('no se pudo descargar el lector (¿sin conexión?)')); }; document.head.appendChild(s); }); }
+LM.readDoc=async function(f){ const n=f.name.toLowerCase();
+  if(/\.(txt|md|csv)$/.test(n)||f.type.startsWith('text/')) return await f.text();
+  if(/\.pdf$/.test(n)){ await load(CDN.pdf); const pj=window.pdfjsLib; pj.GlobalWorkerOptions.workerSrc=CDN.pdfw;
+    const pdf=await pj.getDocument({data:await f.arrayBuffer()}).promise; let out=[];
+    for(let k=1;k<=pdf.numPages;k++){ const pg=await pdf.getPage(k); const tc=await pg.getTextContent(); out.push('[Página '+k+']\n'+tc.items.map(it=>it.str+(it.hasEOL?'\n':' ')).join('')); }
+    const t=out.join('\n\n'); if(t.replace(/\[Página \d+\]|\s/g,'').length<20) throw new Error('el PDF no tiene texto seleccionable (parece escaneado). Use un PDF con texto o pegue el contenido'); return t; }
+  if(/\.docx$/.test(n)){ await load(CDN.docx); const r=await window.mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()}); return r.value; }
+  if(/\.doc$/.test(n)) throw new Error('el formato .doc antiguo no es compatible; guárdelo como .docx o PDF');
+  throw new Error('formato no compatible (use .txt, .pdf o .docx)'); };
+/* ---------- Resultados de ejemplo (simulación) ---------- */
+const SIM={
+ comparar:'## COMPARACIÓN DE DOCUMENTOS (EJEMPLO)\n\n### 1. Coincidencias\n| Tema | Documento A (cita textual) | Documento B (cita textual) | Observación |\n|---|---|---|---|\n| Fecha del acto | "Resolución 123 del 5 de marzo de 2025" (hecho 2) | "la Resolución 123 del 5 de marzo de 2025" (num. 2) | Ambos coinciden |\n\n### 2. Diferencias\n| Tema | Documento A | Documento B | Observación |\n|---|---|---|---|\n| Notificación | "notificada el 10 de marzo" (hecho 3) | "notificada el 7 de marzo" (num. 3) | Fechas distintas [VERIFICAR] |\n| Cuantía | "$45.000.000" (pretensión 2) | No consta | El documento B no se pronuncia |\n\n### 3. Hechos\n- Hecho 1: **aceptado**.\n- Hecho 3: **negado** parcialmente (fecha de notificación).\n- Hecho 4: **no contestado**.\n\n### 5. Resumen\nEl punto en disputa más relevante es la fecha de notificación, que incide en la caducidad.\n\n### PUNTOS A VERIFICAR POR EL ABOGADO\n- Constancia de notificación de la Resolución 123.',
+ contradicciones:'## CONTRADICCIONES DETECTADAS (EJEMPLO)\n\n| N.º | Tipo | Ubicación textual | Descripción | Importancia |\n|---|---|---|---|---|\n| 1 | Fechas inconsistentes | "radicó la petición el 2 de mayo" (hecho 4) vs. "petición del 12 de mayo" (hecho 7) | La misma petición aparece con dos fechas | alta |\n| 2 | Hecho sin prueba | "fue desvinculado sin aviso previo" (hecho 5) | No se relaciona prueba que lo soporte | media |\n| 3 | Prueba no relacionada | "certificado de tradición" (prueba 6) | No se vincula con ningún hecho | baja |\n\n**Fundamentos que no corresponden:** No se encontraron en el documento.\n\n### PUNTOS A VERIFICAR POR EL ABOGADO\n- Fecha real de radicación de la petición.',
+ def:'## BORRADOR GENERADO (EJEMPLO)\n\n### ENCABEZADO\nDespacho: No consta · Radicado: [RADICADO]\n\n### DESARROLLO\n1. Hecho primero, tomado del documento entregado.\n2. Argumento propuesto **[VERIFICAR]**.\n\n### PUNTOS A VERIFICAR POR EL ABOGADO\n- Datos que no constan en los documentos.'};
+/* ---------- Panel de análisis en la vista IA ---------- */
+LM.iaAttach=function(el,getKey,getPid,getPrompt,getTitle){ const box=document.createElement('div'); box.className='card'; box.id='ia-run'; box.style.marginTop='1rem'; el.appendChild(box);
+  const docs={A:'',B:''}; let last='';
+  const slot=(id,t)=>'<div class="ia-doc"><label for="ia-d'+id+'">'+t+'</label><textarea id="ia-d'+id+'" data-d="'+id+'" style="min-height:120px" placeholder="Pegue aquí el texto ANONIMIZADO…">'+E(docs[id])+'</textarea><div class="row"><label class="btn sm" for="ia-f'+id+'" style="margin:0">📎 Subir archivo (.txt, .pdf, .docx)</label><input type="file" id="ia-f'+id+'" data-f="'+id+'" accept=".txt,.md,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hide"><span class="small muted" id="ia-s'+id+'"></span></div></div>';
+  const draw=()=>{ const key=getKey(), two=key==='comparar', has=!!LM.gemKey();
+    box.innerHTML='<h2>⚡ Analizar con IA</h2><p class="small muted">Ejecuta la instrucción de arriba con Google Gemini ('+E(LM.gemModel())+') sobre los documentos que cargue aquí.</p>'+AVISO+
+     (has?'':'<p class="small"><span class="chip warn">Sin clave de API</span> Se mostrará un <b>resultado de ejemplo (simulación)</b>. Para usar la IA real, pegue su clave en <a href="#/config">⚙ Configuración → Inteligencia artificial</a> (se obtiene gratis en aistudio.google.com/apikey).</p>')+
+     '<div class="grid'+(two?' g2':'')+'">'+(two?slot('A','Documento A')+slot('B','Documento B'):slot('A',key==='contradicciones'?'Documento a revisar':'Documento(s)'))+'</div>'+
+     '<div class="row" style="margin-top:.6rem"><button class="btn primary" id="ia-go">⚡ Analizar con IA</button><span class="small muted" id="ia-st" aria-live="polite"></span></div><div id="ia-res"></div>';
+    box.querySelectorAll('[data-d]').forEach(t=>t.oninput=()=>docs[t.dataset.d]=t.value);
+    box.querySelectorAll('[data-f]').forEach(inp=>inp.onchange=async()=>{ const f=inp.files[0], id=inp.dataset.f, s=box.querySelector('#ia-s'+id); if(!f) return; s.textContent='Leyendo '+f.name+'…';
+      try{ const t=await LM.readDoc(f); docs[id]=t; box.querySelector('#ia-d'+id).value=t; s.textContent='✓ '+f.name+' ('+t.length.toLocaleString('es-CO')+' caracteres)'; }
+      catch(e){ s.textContent=''; LM.toast('No se pudo leer '+f.name+': '+e.message); } inp.value=''; });
+    box.querySelector('#ia-go').onclick=run; if(last) show(last.text,last.sim); };
+  const show=(text,sim)=>{ last={text,sim}; const r=box.querySelector('#ia-res');
+    r.innerHTML='<div class="row between" style="margin-top:1rem"><h3 style="margin:0">Resultado'+(sim?' <span class="chip warn">SIMULACIÓN · ejemplo, no es un análisis real</span>':'')+'</h3><div class="row"><button class="btn sm" id="ia-cp">📋 Copiar</button><button class="btn sm" id="ia-dl">⬇ Descargar</button><button class="btn sm" id="ia-nt">📝 Guardar como nota</button></div></div><p class="small" style="color:#a35d00">Revise siempre el resultado antes de usarlo: la IA puede equivocarse.</p><div class="md-out">'+LM.md(text)+'</div>';
+    r.querySelector('#ia-cp').onclick=()=>(navigator.clipboard?navigator.clipboard.writeText(text):Promise.reject()).then(()=>LM.toast('Resultado copiado ✓'),()=>LM.toast('No se pudo copiar'));
+    r.querySelector('#ia-dl').onclick=()=>{ LM.download('Analisis_IA_'+getKey()+'_'+LM.iso(LM.today())+'.md',(sim?'> SIMULACIÓN: resultado de ejemplo\n\n':'')+text,'text/markdown'); LM.toast('Resultado descargado ✓'); };
+    r.querySelector('#ia-nt').onclick=()=>{ const p=LM.proc(getPid()); if(!p) return LM.toast('Seleccione un proceso');
+      p.notas=(p.notas?p.notas+'\n\n':'')+'--- Análisis con IA: '+getTitle()+' ('+new Date().toLocaleString('es-CO')+')'+(sim?' [SIMULACIÓN]':'')+' — revisar ---\n'+text; LM.save(); LM.toast('Guardado en Notas del proceso ✓'); }; };
+  async function run(){ const key=getKey(), two=key==='comparar', st=box.querySelector('#ia-st'), go=box.querySelector('#ia-go');
+    const A=docs.A.trim(), B=docs.B.trim();
+    if(!A||(two&&!B)) return LM.toast(two?'Cargue los dos documentos (A y B)':'Cargue o pegue al menos un documento');
+    const base=getPrompt().split('\n').filter(l=>!/\[Pegue aquí/.test(l)&&!/^(DOCUMENTOS?|DOCUMENTO [AB])\s*$/.test(l.trim())).join('\n');
+    const prompt=base+'\n\n'+(two?'DOCUMENTO A\n"""\n'+A+'\n"""\n\nDOCUMENTO B\n"""\n'+B+'\n"""':'DOCUMENTOS\n"""\n'+A+'\n"""')+'\n\nResponde en Markdown (usa tablas Markdown cuando la estructura pida tablas).';
+    if(!LM.gemKey()){ st.textContent='Simulación (sin clave)'; return show(SIM[key]||SIM.def,true); }
+    go.disabled=true; st.innerHTML='<span class="spin" aria-hidden="true"></span> Analizando con Gemini… puede tardar hasta un minuto';
+    try{ const t=await LM.gemRun(prompt); st.textContent='✓ Listo'; show(t,false); }
+    catch(e){ st.textContent=''; box.querySelector('#ia-res').innerHTML='<div class="card" style="border-color:#c0392b;margin-top:1rem"><b>❌ No se pudo analizar.</b><p class="small">'+E(e.message)+'</p></div>'; }
+    finally{ go.disabled=false; } }
+  draw(); return draw; };
+/* ---------- Configuración ---------- */
+const origC=V.config; V.config=function(el,args){ origC(el,args); const k=LM.gemKey();
+  const card='<div class="card" style="margin-top:1rem" id="cf-ia"><h2>🤖 Inteligencia artificial (Google Gemini)</h2><p class="small muted">Pegue su clave de API de Gemini para que <b>Borradores → 🤖 Instrucciones para IA → ⚡ Analizar con IA</b> ejecute las instrucciones. Obténgala gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. La clave se guarda solo en este navegador (no se exporta en el respaldo JSON ni se envía a ningún servidor distinto de Google).</p>'+AVISO+
+   '<label for="cf-gk">Clave de API</label><div class="row" style="flex-wrap:nowrap"><input id="cf-gk" type="password" autocomplete="off" spellcheck="false" placeholder="AIza…" value="'+E(k)+'" style="flex:1"><button class="btn sm" id="cf-gkv" type="button" aria-label="Mostrar u ocultar clave">👁</button></div>'+
+   '<label for="cf-gm">Modelo</label><input id="cf-gm" value="'+E(LM.gemModel())+'">'+
+   '<div class="row" style="margin-top:.6rem"><button class="btn primary" id="cf-gs">💾 Guardar clave</button><button class="btn" id="cf-gt">🔌 Probar conexión</button><button class="btn danger" id="cf-gd">🗑 Borrar clave</button></div><p class="small" id="cf-gmsg">'+(k?'<span class="chip ok">Clave guardada</span>':'<span class="chip">Sin clave: el análisis funciona en modo simulación</span>')+'</p></div>';
+  const ab=[...el.querySelectorAll('.card')].pop(); ab.insertAdjacentHTML('beforebegin',card);
+  const $=s=>el.querySelector(s), msg=h=>$('#cf-gmsg').innerHTML=h;
+  const saveK=()=>{ const v=$('#cf-gk').value.trim(); const m=$('#cf-gm').value.trim()||DEF_MODEL; try{ v?localStorage.setItem(KK,v):localStorage.removeItem(KK); localStorage.setItem(KM,m); }catch(e){ LM.toast('No se pudo guardar en este navegador'); } return v; };
+  $('#cf-gkv').onclick=()=>{ const i=$('#cf-gk'); i.type=i.type==='password'?'text':'password'; };
+  $('#cf-gs').onclick=()=>{ const v=saveK(); msg(v?'<span class="chip ok">Clave guardada</span>':'<span class="chip">Sin clave</span>'); LM.toast(v?'Clave guardada en este navegador ✓':'Sin clave: modo simulación'); };
+  $('#cf-gt').onclick=async()=>{ const v=saveK(); if(!v) return msg('<span class="chip warn">Pegue primero una clave</span>'); msg('<span class="spin"></span> Probando…');
+    try{ const n=await LM.gemTest(v); msg('<span class="chip ok">✓ Conexión correcta</span> Modelo disponible: '+E(n)); }catch(e){ msg('<span class="chip warn">Error</span> '+E(e.message)); } };
+  $('#cf-gd').onclick=()=>{ if(!confirm('¿Borrar la clave de API de este navegador?')) return; try{ localStorage.removeItem(KK); }catch(e){} $('#cf-gk').value=''; msg('<span class="chip">Clave borrada: modo simulación</span>'); LM.toast('Clave borrada'); };
+};
 })();
 
 </script>

@@ -22,3 +22,8 @@ CONEXIÓN CON EL SITIO WEB (/sitio/) — SOLO DEMO
   (los códigos están en el propio navegador); borrar datos del navegador lo borra todo. En el archivo único LexMonitor_demo.html no hay conexión.
 - EN PRODUCCIÓN (Fase 2 de la propuesta) esto se reemplaza por un servidor con API, base de datos, autenticación real (contraseñas/códigos cifrados,
   sesiones, MFA para el abogado), control de acceso por cliente, almacenamiento seguro de archivos, registro de auditoría y avisos por correo/WhatsApp.
+
+=== Versión 4: Analizar con IA (Google Gemini) ===
+- Configuración > "Inteligencia artificial (Google Gemini)": pegar clave (aistudio.google.com/apikey), Probar conexión, Borrar clave. Guardada solo en localStorage ('lm_gemini_key'); nunca en el código ni en el respaldo JSON.
+- Borradores > Instrucciones para IA > panel "Analizar con IA": cargar texto/.txt/.pdf (pdf.js CDN)/.docx (mammoth CDN), resultado Markdown, copiar/descargar/guardar en Notas. Sin clave: resultado de EJEMPLO marcado como simulación.
+- Plan gratuito: Google puede usar los datos; no subir datos reales de clientes.
