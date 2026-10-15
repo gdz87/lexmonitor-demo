@@ -1047,6 +1047,22 @@ LM.iaCred=()=>{ if(LM.iaModo()==='codigo'){ const c=LM.gemCode(); return c?{code
 LM.iaReady=()=>!!LM.iaCred();
 LM.iaUso=null; /* último estado del código (consultas/días) devuelto por el proxy */
 const isProxy=k=>k&&typeof k==='object';
+/* Enlace directo: ?codigo=LEX-XXXX-XXXX (o #/ruta?codigo=…) activa el modo código, valida y limpia la URL */
+(function(){ try{ const re=/([?&])codigo=([^&#]*)&?/i; let u=location.href, c=null;
+  const sm=location.search.match(re), hm=location.hash.match(re);
+  if(!sm&&!hm) return; c=decodeURIComponent((sm||hm)[2]).trim().toUpperCase().replace(/\s+/g,'');
+  const strip=x=>x.replace(re,(m,p)=>p==='?'?'?':'').replace(/[?&]$/,'');
+  const ns=strip(location.search), nh=strip(location.hash);
+  history.replaceState(null,'',location.pathname+(ns==='?'?'':ns)+(nh==='#'?'':nh));
+  if(!c) return; try{ localStorage.setItem(KCOD,c); localStorage.setItem(KMODO,'codigo'); }catch(e){}
+  const aviso=(html,ok)=>{ const put=()=>{ let d=document.getElementById('lm-cod-aviso'); if(!d){ d=document.createElement('div'); d.id='lm-cod-aviso'; d.setAttribute('role','status'); d.style.cssText='margin:.5rem;padding:.7rem 1rem;border-radius:10px;display:flex;gap:.6rem;align-items:center;justify-content:space-between;font-size:.95rem;position:relative;z-index:5'; const b=document.querySelector('.demo-banner'); b?b.insertAdjacentElement('afterend',d):document.body.prepend(d); }
+      d.style.background=ok?'#e6f4ea':'#fdecea'; d.style.color=ok?'#14532d':'#7f1d1d'; d.style.border='1px solid '+(ok?'#9bd3ae':'#f1a9a0');
+      d.innerHTML='<span>'+html+'</span><button type="button" aria-label="Cerrar aviso" style="background:none;border:0;font-size:1.2rem;cursor:pointer;color:inherit">✕</button>'; d.querySelector('button').onclick=()=>d.remove(); };
+    document.readyState==='loading'?document.addEventListener('DOMContentLoaded',put):put(); };
+  aviso('⏳ Activando la IA con el código '+E(c)+'…',true);
+  Promise.resolve().then(()=>LM.iaEstado(c)).then(s=>{ const f=new Date(s.vence).toLocaleDateString('es-CO',{timeZone:'America/Bogota',day:'numeric',month:'long',year:'numeric'});
+    aviso('✅ <b>IA activada</b> · vence el '+E(f)+' · '+s.diario+' consultas/día (hoy lleva '+s.consultasHoy+'). Pruébela en <a href="#/asistente" style="color:inherit;font-weight:600">🤖 Asistente IA</a>.',true); },
+   e=>aviso('❌ <b>No se pudo activar la IA.</b> '+E(e.message.replace(/\s*\[[A-Z_]+\]$/,'')),false)); }catch(e){} })();
 const proxyErr=body=>{ const e=new Error((body.error.message||'Error del servidor de prueba')+(body.error.status?' ['+body.error.status+']':'')); e.proxy=true; e.status=body.error.code; e.body=body; return e; };
 LM.iaEstado=async function(code){ let res,body; try{ res=await fetch(PROXY_URL+'/v1/estado',{headers:{'X-Codigo':code}}); body=await res.json(); }catch(e){ throw new Error('No se pudo conectar con el servidor de prueba ('+PROXY_URL+').'); }
   if(!res.ok) throw (body&&body.error?proxyErr(body):new Error('Servidor de prueba: '+res.status)); LM.iaUso=body; return body; };
