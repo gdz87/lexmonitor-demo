@@ -6,7 +6,8 @@ const i=LM.NAV.findIndex(n=>n.id==='asistente'); if(i>=0) LM.NAV[i]={id:'revisio
 const j=LM.NAV.findIndex(n=>n.id==='agenda'); LM.NAV.splice(j+1,0,{id:'asistente',ic:'🤖',t:'Asistente IA'});
 V.revision=V.asistente;
 const GEN=['contestacion','reposicion','apelacion','tutela','concepto'];
-function iaStatus(){ const k=LM.gemKey&&LM.gemKey(); if(!k) return '<div class="card row between" style="margin:.6rem 0"><span><span class="chip warn">Sin clave de API</span> Los resultados serán de ejemplo (simulación).</span><a class="btn sm primary" href="#/config">⚙ Configurar clave</a></div>';
+function iaStatus(){ const k=LM.iaReady&&LM.iaReady(); if(k&&LM.iaModo()==='codigo') return '<div class="card row between" style="margin:.6rem 0"><span><span class="chip ok">IA · código de prueba</span> <span class="small">'+E(LM.gemCode())+(LM.iaUso&&LM.iaUso.restantesHoy!=null?' · quedan <b>'+LM.iaUso.restantesHoy+'</b> consultas hoy · '+LM.iaUso.diasRestantes+' día(s)':'')+'</span></span><a class="small" href="#/config">Configuración</a></div>';
+  if(!k) return '<div class="card row between" style="margin:.6rem 0"><span><span class="chip warn">Sin clave ni código</span> Los resultados serán de ejemplo (simulación).</span><a class="btn sm primary" href="#/config">⚙ Configurar clave</a></div>';
   let ok=null; try{ const o=JSON.parse(localStorage.getItem('lm_gemini_ok')||'null'); ok=o&&o.m; }catch(e){}
   const m=LM.gemModel(); return '<div class="card row between" style="margin:.6rem 0"><span><span class="chip ok">IA conectada</span> <span class="small">Google Gemini · modelo: <b>'+E(m==='auto'?'Automático':m)+'</b>'+(ok?' · último que respondió: '+E(ok):'')+'</span></span><a class="small" href="#/config">Configuración</a></div>'; }
 V.asistente=function(el,args){ const S=LM.state; let pid=args[0]&&LM.proc(args[0])?args[0]:S.procesos[0].id; let mode=args[1]==='gen'?'generar':'analizar';

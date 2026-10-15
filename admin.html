@@ -1,0 +1,29 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>LexMonitor · Administración de códigos de prueba</title>
+<style>body{font:15px system-ui,sans-serif;max-width:960px;margin:1.5rem auto;padding:0 1rem;color:#1d2733}h1{font-size:1.3rem}.card{border:1px solid #d5dbe3;border-radius:10px;padding:1rem;margin:1rem 0}label{display:block;font-weight:600;margin:.5rem 0 .2rem}input{padding:.45rem;border:1px solid #bbb;border-radius:6px;width:100%;box-sizing:border-box}.row{display:flex;gap:.6rem;align-items:end;flex-wrap:wrap}.row>div{flex:1;min-width:140px}button{padding:.5rem .9rem;border-radius:6px;border:1px solid #1f5fa8;background:#1f5fa8;color:#fff;cursor:pointer}button.sec{background:#fff;color:#1f5fa8}button.dan{background:#c0392b;border-color:#c0392b}table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{border-bottom:1px solid #e3e7ed;padding:.4rem;text-align:left}code{font-size:1rem;background:#eef3fa;padding:.1rem .3rem;border-radius:4px}.ok{color:#1e7e34}.ko{color:#c0392b}#msg{min-height:1.2rem}.hide{display:none}</style></head><body>
+<h1>🔐 LexMonitor · Códigos de prueba de IA</h1>
+<div class="card" id="login"><label for="srv">URL del servidor proxy</label><input id="srv" placeholder="https://lexmonitor-proxy.xxxx.workers.dev">
+<label for="tok">Token de administrador (ADMIN_TOKEN)</label><input id="tok" type="password" autocomplete="off"><p><small>Se guarda solo en esta pestaña (sessionStorage) y se borra al cerrarla.</small></p><button id="entrar">Entrar</button></div>
+<div id="panel" class="hide">
+<div class="card"><b>Nuevo código</b><div class="row"><div><label for="nom">Nombre (persona o firma)</label><input id="nom" maxlength="80"></div><div style="max-width:110px"><label for="dias">Días</label><input id="dias" type="number" min="1" max="90" value="7"></div><div style="max-width:130px"><label for="dia">Consultas/día</label><input id="dia" type="number" min="1" max="500" value="20"></div><div style="flex:0"><button id="crear">Crear</button></div></div><p id="nuevo"></p></div>
+<div class="card"><div class="row" style="justify-content:space-between;align-items:center"><b>Códigos</b><span><button class="sec" id="recargar">↻ Recargar</button> <button class="sec" id="salir">Salir</button></span></div><div id="lista">…</div></div></div>
+<p id="msg"></p>
+<script>
+const $=s=>document.querySelector(s), E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const DEF=(window.LM_PROXY||'https://lexmonitor-proxy.gdz87.workers.dev');
+$('#srv').value=sessionStorage.getItem('lm_adm_srv')||localStorage.getItem('lm_adm_srv')||DEF;
+const S=()=>sessionStorage.getItem('lm_adm_srv').replace(/\/$/,''), T=()=>sessionStorage.getItem('lm_adm_tok');
+const msg=(t,ok)=>{ $('#msg').innerHTML=t?'<span class="'+(ok?'ok':'ko')+'">'+E(t)+'</span>':''; };
+async function api(p,o={}){ const r=await fetch(S()+p,{...o,headers:{'Content-Type':'application/json',Authorization:'Bearer '+T()}}); const b=await r.json().catch(()=>({})); if(!r.ok) throw new Error((b.error&&b.error.message)||('Error '+r.status)); return b; }
+const fecha=s=>new Date(s).toLocaleString('es-CO',{timeZone:'America/Bogota',dateStyle:'medium',timeStyle:'short'});
+async function cargar(){ try{ const {codigos}=await api('/admin/codigos'); $('#lista').innerHTML=codigos.length?'<table><tr><th>Código</th><th>Nombre</th><th>Creado</th><th>Vence</th><th>Hoy</th><th>Estado</th><th></th></tr>'+codigos.map(c=>'<tr><td><code>'+E(c.codigo)+'</code></td><td>'+E(c.nombre)+'</td><td>'+fecha(c.creado)+'</td><td>'+fecha(c.vence)+(c.vencido?'':' ('+c.diasRestantes+' d)')+'</td><td>'+c.consultasHoy+' / '+c.diario+'</td><td>'+(!c.activo?'<span class="ko">Desactivado</span>':c.vencido?'<span class="ko">Vencido</span>':'<span class="ok">Activo</span>')+'</td><td>'+(c.activo?'<button class="dan" data-off="'+E(c.codigo)+'">Desactivar</button>':'<button class="sec" data-on="'+E(c.codigo)+'">Reactivar</button>')+'</td></tr>').join('')+'</table>':'<p>No hay códigos.</p>';
+  document.querySelectorAll('[data-off]').forEach(b=>b.onclick=async()=>{ if(!confirm('¿Desactivar '+b.dataset.off+'?')) return; try{ await api('/admin/codigos/'+b.dataset.off+'/desactivar',{method:'POST'}); msg('Código desactivado',1); cargar(); }catch(e){ msg(e.message); } });
+  document.querySelectorAll('[data-on]').forEach(b=>b.onclick=async()=>{ try{ await api('/admin/codigos/'+b.dataset.on+'/activar',{method:'POST'}); msg('Código reactivado',1); cargar(); }catch(e){ msg(e.message); } });
+  return true; }catch(e){ msg(e.message); return false; } }
+async function entrar(){ $('#login').classList.add('hide'); $('#panel').classList.remove('hide'); if(!await cargar()){ $('#panel').classList.add('hide'); $('#login').classList.remove('hide'); sessionStorage.removeItem('lm_adm_tok'); } else msg(''); }
+$('#entrar').onclick=()=>{ const s=$('#srv').value.trim(), t=$('#tok').value.trim(); if(!s||!t) return msg('Complete la URL y el token'); sessionStorage.setItem('lm_adm_srv',s); localStorage.setItem('lm_adm_srv',s); sessionStorage.setItem('lm_adm_tok',t); $('#tok').value=''; entrar(); };
+$('#salir').onclick=()=>{ sessionStorage.removeItem('lm_adm_tok'); location.reload(); };
+$('#recargar').onclick=cargar;
+$('#crear').onclick=async()=>{ try{ const c=await api('/admin/codigos',{method:'POST',body:JSON.stringify({nombre:$('#nom').value,dias:+$('#dias').value,diario:+$('#dia').value})}); $('#nuevo').innerHTML='✓ Código creado: <code>'+E(c.codigo)+'</code> para '+E(c.nombre)+' · vence '+fecha(c.vence)+' · '+c.diario+' consultas/día'; $('#nom').value=''; cargar(); }catch(e){ msg(e.message); } };
+if(T()&&sessionStorage.getItem('lm_adm_srv')) entrar();
+</script></body></html>
