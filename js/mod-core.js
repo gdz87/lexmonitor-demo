@@ -22,7 +22,7 @@ V.tablero=function(el){
   const byMedio={}; S.procesos.forEach(p=>byMedio[p.medio]=(byMedio[p.medio]||0)+1);
   const months=[]; for(let i=5;i>=0;i--){ const d=new Date(LM.today().getFullYear(),LM.today().getMonth()-i,1); const k=LM.iso(d).slice(0,7); months.push({k:LM.MES[d.getMonth()].slice(0,3),key:k,v:0}); }
   S.procesos.forEach(p=>p.actuaciones.forEach(a=>{ const m=months.find(x=>x.key===a.fecha.slice(0,7)); if(m) m.v++; }));
-  el.innerHTML='<div class="row between"><div><h1>'+(new Date().getHours()<12?'Buenos días':new Date().getHours()<19?'Buenas tardes':'Buenas noches')+' 👋</h1><p class="muted small">'+LM.fmtLong(hoy)+' · '+E(S.config.firma)+'</p></div><div class="row no-print"><a class="btn primary" href="#/procesos/nuevo">＋ Nuevo proceso</a><button class="btn" id="simNow">⟳ Consultar SAMAI (simulado)</button></div></div>'+
+  el.innerHTML='<div class="row between"><div><h1>'+(new Date().getHours()<12?'Buenos días':new Date().getHours()<19?'Buenas tardes':'Buenas noches')+' 👋</h1><p class="muted small">'+LM.fmtLong(hoy)+' · '+E(S.config.firma)+'</p></div><div class="row no-print dash-acts"><a class="btn primary" href="#/procesos/nuevo">＋ Nuevo proceso</a><button class="btn" id="simNow">⟳ Consultar SAMAI (simulado)</button><button class="btn" id="ramaNow">🏛 Consultar Rama Judicial</button></div></div>'+
   '<div class="grid g4" style="margin-top:.5rem">'+
    kpi(act.length,'Procesos activos','#/procesos')+kpi(vHoy.length,'Términos que vencen hoy','#/agenda',vHoy.length?'danger':'')+kpi(vSem.length,'Eventos próximos 7 días','#/agenda',vSem.length?'warn':'')+kpi(nuevas.length,'Alertas nuevas','#/alertas',nuevas.length?'info':'')+'</div>'+(function(){ const sn=window.LexShared?LexShared.countNuevas():0; return '<a class="card item row between" id="kpiSol" href="#/solicitudes" style="margin-top:1rem"><span>📨 <b>Solicitudes del portal</b> <span class="small muted">(sitio web y portal del cliente)</span></span><span class="chip '+(sn?'danger':'ok')+'" style="font-size:.9rem">'+sn+' nueva'+(sn===1?'':'s')+'</span></a>'; })()+
   '<div class="grid g3" style="margin-top:1rem">'+
@@ -33,6 +33,7 @@ V.tablero=function(el){
    S.alertas.slice().sort((a,b)=>a.fecha<b.fecha?1:-1).slice(0,4).map(a=>'<a class="item" href="#/proceso/'+a.procesoId+'"><div class="row between"><b>'+E(a.titulo)+'</b>'+(a.leida?'':'<span class="chip info">Nueva</span>')+'</div><div class="small muted">'+E((LM.proc(a.procesoId)||{}).medio||'')+' · '+a.fecha.replace('T',' ')+'</div></a>').join('')+'</div></div>'+
    '<div class="card assist"><div class="row between"><h2>🧭 El asistente encontró '+hall.length+' puntos a revisar</h2><a href="#/revision" class="small">Revisar</a></div><div class="list">'+hall.slice(0,4).map(h=>'<div class="small"><span class="chip '+(h.nivel==='alta'?'danger':h.nivel==='media'?'warn':'info')+'">'+h.nivel+'</span> '+E(h.titulo)+'</div>').join('')+'</div></div></div>';
   el.querySelector('#simNow').onclick=()=>{ LM.simulateSamai(true); };
+  el.querySelector('#ramaNow').onclick=()=>LM.ramaLoteUI();
 };
 function kpi(n,l,href,cls){ return '<a class="card kpi item" href="'+href+'"><div class="n" style="color:var(--'+(cls||'text')+')">'+n+'</div><div class="l">'+l+'</div></a>'; }
 
