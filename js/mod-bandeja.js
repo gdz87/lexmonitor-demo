@@ -83,10 +83,11 @@ V.bandeja=function(el){ const S=LM.state; S.bandeja=S.bandeja||[];
   el.querySelector('#bx-go').onclick=async e=>{ const txt=raw.value.trim(); if(txt.length<20){ LM.toast('Pegue el correo o cargue un .eml'); return; } const btn=e.target, st=el.querySelector('#bx-st'); btn.disabled=true; btn.textContent='⏳ Analizando…'; const t0=Date.now();
     try{ const m=LM.parseEmail(txt); const r=await LM.bandejaAnalizar(m); const b={id:LM.uid(),at:new Date().toISOString(),m:{de:m.de,para:m.para,asunto:m.asunto,fecha:m.fecha,cuerpo:m.cuerpo.slice(0,20000)},r};
       const p=asociar(m,r.radicado); b.procesoId=p?p.id:null; b.vence=vence(r,m); if(r.categoria!=='sin_importancia') crearAlerta(b);
-      S.bandeja.push(b); S.bandeja=S.bandeja.slice(-100); LM.save(); LM.refreshChrome(); st.innerHTML='✓ Analizado en '+Math.round((Date.now()-t0)/1000)+' s'+(r.simulado?' (simulación sin IA)':''); show(b); res.scrollIntoView({behavior:'smooth'}); }
+      S.bandeja.push(b); S.bandeja=S.bandeja.slice(-100); LM.save(); LM.refreshChrome(); st.innerHTML='✓ Analizado en '+Math.round((Date.now()-t0)/1000)+' s'+(r.simulado?' (simulación sin IA)':''); LM._bxOpen={id:b.id,msg:st.innerHTML}; V.bandeja(el); return; }
     catch(err){ st.innerHTML='<span class="err">⚠ '+E(err.message)+'</span>'; }
     btn.disabled=false; btn.textContent='🤖 Analizar con IA'; };
   el.querySelectorAll('[data-ab]').forEach(x=>x.onclick=()=>{ show(S.bandeja.find(b=>b.id===x.dataset.ab)); res.scrollIntoView(); });
+  if(LM._bxOpen){ const o=LM._bxOpen; LM._bxOpen=null; const b=S.bandeja.find(x=>x.id===o.id); if(b){ el.querySelector('#bx-st').innerHTML=o.msg; show(b); setTimeout(()=>res.scrollIntoView({behavior:'smooth'}),50); } }
   el.querySelectorAll('[data-del]').forEach(x=>x.onclick=()=>{ S.bandeja=S.bandeja.filter(b=>b.id!==x.dataset.del); LM.save(); V.bandeja(el); });
 };
 })();
