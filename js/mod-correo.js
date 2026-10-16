@@ -1,0 +1,37 @@
+/* Correo · conexión del buzón del abogado (Gmail, Outlook/Microsoft 365, IMAP) a través del servidor LexMonitor.
+   El servidor guarda las credenciales cifradas, revisa el buzón cada 15 minutos y clasifica con IA. LexMonitor solo crea BORRADORES: nunca envía. */
+(function(){
+const LM=window.LM, E=LM.esc; const NOM={google:'Gmail',microsoft:'Outlook / Microsoft 365',imap:'IMAP'};
+/* Regreso del OAuth: #/bandeja?mail=ok | #/bandeja?mail_error=… */
+(function(){ const m=location.hash.match(/^#\/bandeja\?(mail|mail_error)=([^&]*)/); if(!m) return; const msg=decodeURIComponent(m[2]);
+  history.replaceState(null,'',location.pathname+location.search+'#/bandeja'); LM._correoAviso=m[1]==='mail'?{ok:true,t:'✅ Buzón conectado. La primera sincronización puede tardar unos segundos.'}:{ok:false,t:'⚠ No se pudo conectar el buzón: '+msg}; })();
+const cod=()=>(LM.gemCode&&LM.gemCode())||'';
+LM.correoFetch=async function(path,o){ o=o||{}; const c=cod(); const h=Object.assign({},o.body?{'Content-Type':'application/json'}:{},c?{'X-Codigo':c}:{});
+  let r,j; try{ r=await fetch(LM.PROXY_URL+path,{method:o.method||'GET',headers:h,body:o.body?JSON.stringify(o.body):undefined}); j=await r.json(); }catch(e){ throw new Error('No se pudo conectar con el servidor de correo de LexMonitor.'); }
+  if(!r.ok||j.error) throw new Error((j.error&&j.error.message)||('Error '+r.status)); return j; };
+LM.correoBorrador=async function(b,d){ const j=await LM.correoFetch('/mail/draft',{method:'POST',body:{id:b.srv.id,to:d.to,subject:d.subject,body:d.body}}); if(j.enviado!==false) throw new Error('Respuesta inesperada del servidor');
+  return {donde:NOM[j.provider]||j.provider,id:j.borrador&&j.borrador.id,web:j.borrador&&j.borrador.web,at:new Date().toISOString()}; };
+/* Lleva a la bandeja local los correos clasificados por el servidor (crea alertas solo para los nuevos) */
+LM.correoIngresar=function(items,provider){ let n=0; (items||[]).slice().reverse().forEach(it=>{ const b=LM.bandejaIngresar({de:it.de,para:it.para,asunto:it.asunto,fecha:it.fecha,cuerpo:it.cuerpo},JSON.parse(JSON.stringify(it.r||{categoria:'cliente'})),{id:it.id,provider}); if(b) n++; }); if(n){ LM.save(); LM.refreshChrome(); } return n; };
+LM.correoCard=async function(host,rerender){ if(!host) return; const aviso=LM._correoAviso; LM._correoAviso=null;
+  host.innerHTML='<div class="card" style="margin-bottom:1rem"><h2>📬 Buzón conectado</h2><p class="small muted">⏳ Consultando el estado de la conexión…</p></div>';
+  let st; try{ st=await LM.correoFetch('/mail/status'); }catch(e){ host.innerHTML='<div class="card" style="margin-bottom:1rem"><h2>📬 Buzón conectado</h2><p class="small"><span class="chip warn">Sin conexión con el servidor</span> '+E(e.message)+' Puede seguir pegando o importando correos abajo.</p></div>'; return; }
+  const C=st.configurado||{}, cx=st.conexion; const chip=ok=>ok?'<span class="chip ok">disponible</span>':'<span class="chip warn">pendiente de configurar</span>';
+  let h='<div class="card" style="margin-bottom:1rem"><div class="row between"><h2>📬 Buzón conectado</h2>'+(cx?'<span class="chip ok">'+E(NOM[cx.provider]||cx.provider)+' · '+E(cx.email||'')+'</span>':'<span class="chip">sin conectar</span>')+'</div>'+
+   (aviso?'<p class="small '+(aviso.ok?'':'err')+'">'+E(aviso.t)+'</p>':'');
+  if(!cod()) h+='<p class="small"><span class="chip warn">Requiere código de acceso</span> Para conectar su buzón escriba su código en <a href="#/config">⚙ Configuración → Inteligencia artificial</a>. Mientras tanto puede pegar o importar correos abajo.</p>';
+  if(cx){ h+='<p class="small">Revisión automática cada 15 minutos. Última sincronización: <b>'+(cx.ultimaSync?new Date(cx.ultimaSync).toLocaleString('es-CO'):'—')+'</b> · correos clasificados hoy: '+(cx.usadosHoy||0)+' de '+cx.limiteDia+'.</p><div class="row"><button class="btn primary" id="cx-sync">⟳ Sincronizar ahora</button><button class="btn" id="cx-off">Desconectar</button></div><div id="cx-msg" class="small muted" style="margin-top:.4rem"></div>'; }
+  else if(cod()){ h+='<p class="small">Conecte su correo para que LexMonitor traiga y clasifique los correos nuevos. Las respuestas se guardan como <b>borradores</b> en su buzón; usted decide si las envía.</p><div class="row">'+
+     '<button class="btn primary" id="cx-g"'+(C.google?'':' disabled')+'>Conectar Gmail</button>'+chip(C.google)+'<button class="btn primary" id="cx-m"'+(C.microsoft?'':' disabled')+'>Conectar Outlook</button>'+chip(C.microsoft)+'</div>'+
+     '<details style="margin-top:.6rem"><summary class="small"><b>IMAP</b> (correo del hosting o de otro proveedor)</summary><div class="grid g2" style="margin-top:.5rem"><label>Servidor IMAP<input id="cx-host" placeholder="mail.sufirma.com"></label><label>Usuario<input id="cx-user" autocomplete="username" placeholder="abogado@sufirma.com"></label></div><label>Contraseña de aplicación<input id="cx-pass" type="password" autocomplete="current-password"></label><p class="small muted">IMAP con TLS (puerto 993). Use una contraseña de aplicación, no la principal. Se guarda cifrada en el servidor; los borradores se guardan en su carpeta Borradores.</p><button class="btn" id="cx-imap">Conectar IMAP</button></details>'; }
+  h+='<p class="small muted" style="margin-top:.6rem">🔒 Confidencialidad: el servidor usa la API de Gemini; para correos reales de clientes use el plan pago de Gemini (sin uso de datos para entrenamiento). Ver la guía de configuración del correo.</p></div>';
+  host.innerHTML=h; const q=s=>host.querySelector(s), msg=t=>{ const m=q('#cx-msg'); if(m) m.innerHTML=t; };
+  const go=pv=>{ location.href=LM.PROXY_URL+'/mail/oauth/start?provider='+pv+'&codigo='+encodeURIComponent(cod())+'&ret='+encodeURIComponent(location.href.split('#')[0]); };
+  q('#cx-g')&&(q('#cx-g').onclick=()=>go('google')); q('#cx-m')&&(q('#cx-m').onclick=()=>go('microsoft'));
+  q('#cx-imap')&&(q('#cx-imap').onclick=async e=>{ const b=e.target; b.disabled=true; b.textContent='⏳ Probando conexión…'; try{ await LM.correoFetch('/mail/imap',{method:'POST',body:{host:q('#cx-host').value,port:993,user:q('#cx-user').value,pass:q('#cx-pass').value}}); LM._correoAviso={ok:true,t:'✅ Buzón IMAP conectado.'}; rerender(); }catch(err){ b.disabled=false; b.textContent='Conectar IMAP'; LM.toast('⚠ '+err.message); } });
+  if(cx){ const ingest=j=>{ const n=LM.correoIngresar(j.items,cx.provider); return n; };
+    try{ const j=await LM.correoFetch('/mail/items'); const n=ingest(j); if(n){ LM.toast('📬 '+n+' correos nuevos del buzón'); rerender(); return; } }catch(e){ msg('⚠ '+E(e.message)); }
+    q('#cx-sync').onclick=async e=>{ const b=e.target; b.disabled=true; b.textContent='⏳ Sincronizando…'; try{ const j=await LM.correoFetch('/mail/sync',{method:'POST'}); const n=ingest(j);
+        LM._correoAviso={ok:!j.error,t:j.error?'⚠ '+j.error:j.limite?'Se alcanzó el límite diario de clasificación.':(n?'📬 '+n+' correos nuevos clasificados.':'Sin correos nuevos.')}; rerender(); }catch(err){ b.disabled=false; b.textContent='⟳ Sincronizar ahora'; msg('⚠ '+E(err.message)); } };
+    q('#cx-off').onclick=async()=>{ if(!confirm('¿Desconectar el buzón? Se borran del servidor las credenciales y los correos clasificados (los que ya están en LexMonitor se conservan).')) return; try{ await LM.correoFetch('/mail/disconnect',{method:'POST'}); LM._correoAviso={ok:true,t:'Buzón desconectado.'}; rerender(); }catch(err){ msg('⚠ '+E(err.message)); } }; } };
+})();

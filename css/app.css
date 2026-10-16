@@ -100,3 +100,6 @@ label.row{flex-wrap:nowrap;align-items:flex-start;gap:.6rem}label.row input[type
 .ia-bigs{gap:.7rem}.ia-big{display:flex;flex-direction:column;align-items:flex-start;gap:.25rem;text-align:left;cursor:pointer;border:2px solid transparent;font:inherit;color:inherit;min-height:110px}
 .ia-big .ia-ic{font-size:1.8rem}.ia-big b{font-size:1.05rem}.ia-big.on{border-color:#1f4fa3;box-shadow:0 0 0 3px rgba(31,79,163,.15)}
 #ia-lib summary{cursor:pointer;padding:.2rem 0}
+
+.navgrp{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:.8rem .8rem .25rem}.navgrp:first-child{padding-top:0}.sheet .grid-links .sheetgrp{grid-column:1/-1;padding:.4rem 0 0}
+.cj-tabs{display:flex;gap:.4rem;border-bottom:1px solid var(--border);margin:0 0 1rem;flex-wrap:wrap}.cj-tabs a{padding:.55rem 1rem;border-radius:10px 10px 0 0;text-decoration:none;color:var(--muted);font-weight:600;border:1px solid transparent;border-bottom:0;min-height:44px;display:flex;align-items:center;gap:.4rem}.cj-tabs a.on{color:var(--primary);background:var(--surface);border-color:var(--border);margin-bottom:-1px}

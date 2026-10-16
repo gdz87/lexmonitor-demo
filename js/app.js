@@ -3,8 +3,8 @@
 const LM=window.LM, $=s=>document.querySelector(s);
 LM.$=$; LM.views={};
 LM.NAV=[
- {id:'tablero',ic:'▦',t:'Tablero',main:true},{id:'procesos',ic:'📁',t:'Procesos',main:true},{id:'alertas',ic:'🔔',t:'Alertas SAMAI',main:true},
- {id:'agenda',ic:'📅',t:'Agenda',main:true},{id:'rama',ic:'🏛',t:'Rama Judicial'},{id:'bandeja',ic:'📥',t:'Bandeja inteligente'},{id:'terminos',ic:'⏱',t:'Términos'},{id:'asistente',ic:'🧭',t:'Asistente'},
+ {id:'tablero',ic:'▦',t:'Tablero',main:true},{id:'procesos',ic:'📁',t:'Procesos',main:true},{id:'alertas',ic:'🔔',t:'SAMAI',bt:'Consulta',main:true},
+ {id:'agenda',ic:'📅',t:'Agenda',main:true},{id:'bandeja',ic:'📥',t:'Bandeja inteligente'},{id:'terminos',ic:'⏱',t:'Términos'},{id:'rama',ic:'🏛',t:'Rama Judicial'},{id:'asistente',ic:'🧭',t:'Asistente'},
  {id:'solicitudes',ic:'📨',t:'Solicitudes del portal'},{id:'clientes',ic:'👥',t:'Clientes'},{id:'borradores',ic:'📝',t:'Borradores'},{id:'reportes',ic:'📊',t:'Reportes'},
  {id:'notificaciones',ic:'💬',t:'Canales'},{id:'config',ic:'⚙',t:'Configuración'}
 ];
@@ -26,11 +26,17 @@ LM.migrate=function(st){ if((st.version||1)>=2) return st; const PUB=(window.Lex
   st.procesos.forEach(p=>{ if(p.apoderado===undefined) p.apoderado=st.config.abogado||''; p.jurisprudencia=p.jurisprudencia||[]; if(p.publicar===undefined){ const d=PUB[p.id]; p.publicar=!!d; p.resumenCliente=d?d.resumen:''; (p.actuaciones||[]).forEach(a=>{ if(d&&d.acts[a.titulo]){ a.publicar=true; a.resumenCliente=d.acts[a.titulo]; } }); } });
   const demo=LM.demoData(); st.procesos.forEach(p=>{ if(p.id==='p1'&&!p.jurisprudencia.length){ const dp=demo.procesos.find(x=>x.id==='p1'); p.jurisprudencia=dp.jurisprudencia; } });
   st.version=2; return st; };
+/* Menú agrupado: el grupo se asigna por id al dibujar (incluye entradas que agregan otros módulos) */
+LM.NAV_GRUPOS=[['General',['tablero','procesos','agenda','terminos']],['Consulta judicial',['alertas','rama']],['Correo y clientes',['bandeja','solicitudes','clientes','notificaciones']],['IA y documentos',['asistente','revision','borradores','reportes']],['Ajustes',['config']]];
+LM.CONSULTA=['alertas','rama','samai','consulta'];
 function buildNav(){
-  const link=(n,cls)=>'<a href="#/'+n.id+'" data-nav="'+n.id+'" class="'+(cls||'')+'"><span class="ic" aria-hidden="true">'+n.ic+'</span><span>'+n.t+'</span></a>';
-  $('#sidenav').innerHTML=LM.NAV.map(n=>link(n)).join('');
-  $('#bottomnav').innerHTML=LM.NAV.filter(n=>n.main).map(n=>link(n)).join('')+'<a href="#" id="navMore"><span class="ic">⋯</span><span>Más</span></a>';
-  $('#sheetLinks').innerHTML=LM.NAV.map(n=>link(n)).join('');
+  const link=(n,cls,short)=>'<a href="#/'+n.id+'" data-nav="'+n.id+'" class="'+(cls||'')+'"><span class="ic" aria-hidden="true">'+n.ic+'</span><span>'+(short&&n.bt||n.t)+'</span></a>';
+  const G=LM.NAV_GRUPOS, gi=id=>{ const i=G.findIndex(g=>g[1].includes(id)); return i<0?G.length:i; };
+  const ord=LM.NAV.map((n,i)=>[n,i]).sort((a,b)=>gi(a[0].id)-gi(b[0].id)||a[1]-b[1]).map(x=>x[0]);
+  const grouped=(hcls)=>{ let cur=-1, h=''; ord.forEach(n=>{ const g=gi(n.id); if(g!==cur){ cur=g; h+='<div class="'+hcls+'" role="presentation">'+(G[g]?G[g][0]:'Otros')+'</div>'; } h+=link(n); }); return h; };
+  $('#sidenav').innerHTML=grouped('navgrp');
+  $('#bottomnav').innerHTML=LM.NAV.filter(n=>n.main).map(n=>link(n,'',true)).join('')+'<a href="#" id="navMore"><span class="ic">⋯</span><span>Más</span></a>';
+  $('#sheetLinks').innerHTML=grouped('navgrp sheetgrp');
   const open=v=>{$('#sheet').classList.toggle('open',v);$('#sheetBg').classList.toggle('open',v);};
   $('#navMore').onclick=e=>{e.preventDefault();open(true);}; $('#btnMenu').onclick=()=>open(true); $('#sheetBg').onclick=()=>open(false);
   $('#sheetLinks').addEventListener('click',()=>open(false));
@@ -39,8 +45,8 @@ function buildNav(){
 }
 LM.route=function(){
   const h=location.hash.replace(/^#\/?/,'')||'tablero'; const [name,...args]=h.split('/');
-  const v=LM.views[name]||LM.views.tablero; const navId=name==='proceso'?'procesos':name;
-  document.querySelectorAll('[data-nav]').forEach(a=>a.classList.toggle('active',a.dataset.nav===navId));
+  const v=LM.views[name]||LM.views.tablero; const navId=name==='proceso'?'procesos':name==='samai'?'alertas':name;
+  const inC=LM.CONSULTA.includes(navId); document.querySelectorAll('[data-nav]').forEach(a=>a.classList.toggle('active',a.dataset.nav===navId||(inC&&a.dataset.nav==='alertas'&&a.closest('#bottomnav'))));
   const el=$('#view'); try{ el.innerHTML=''; v(el,args.map(decodeURIComponent)); }catch(e){ console.error(e); el.innerHTML='<div class="card err">Error al cargar el módulo: '+LM.esc(e.message)+'</div>'; }
   LM.refreshChrome(); window.scrollTo(0,0);
 };

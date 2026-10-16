@@ -111,6 +111,9 @@ label.row{flex-wrap:nowrap;align-items:flex-start;gap:.6rem}label.row input[type
 .ia-big .ia-ic{font-size:1.8rem}.ia-big b{font-size:1.05rem}.ia-big.on{border-color:#1f4fa3;box-shadow:0 0 0 3px rgba(31,79,163,.15)}
 #ia-lib summary{cursor:pointer;padding:.2rem 0}
 
+.navgrp{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:.8rem .8rem .25rem}.navgrp:first-child{padding-top:0}.sheet .grid-links .sheetgrp{grid-column:1/-1;padding:.4rem 0 0}
+.cj-tabs{display:flex;gap:.4rem;border-bottom:1px solid var(--border);margin:0 0 1rem;flex-wrap:wrap}.cj-tabs a{padding:.55rem 1rem;border-radius:10px 10px 0 0;text-decoration:none;color:var(--muted);font-weight:600;border:1px solid transparent;border-bottom:0;min-height:44px;display:flex;align-items:center;gap:.4rem}.cj-tabs a.on{color:var(--primary);background:var(--surface);border-color:var(--border);margin-bottom:-1px}
+
 </style>
 </head>
 <body>
@@ -450,8 +453,8 @@ LM.demoData=function(){
 const LM=window.LM, $=s=>document.querySelector(s);
 LM.$=$; LM.views={};
 LM.NAV=[
- {id:'tablero',ic:'▦',t:'Tablero',main:true},{id:'procesos',ic:'📁',t:'Procesos',main:true},{id:'alertas',ic:'🔔',t:'Alertas SAMAI',main:true},
- {id:'agenda',ic:'📅',t:'Agenda',main:true},{id:'rama',ic:'🏛',t:'Rama Judicial'},{id:'bandeja',ic:'📥',t:'Bandeja inteligente'},{id:'terminos',ic:'⏱',t:'Términos'},{id:'asistente',ic:'🧭',t:'Asistente'},
+ {id:'tablero',ic:'▦',t:'Tablero',main:true},{id:'procesos',ic:'📁',t:'Procesos',main:true},{id:'alertas',ic:'🔔',t:'SAMAI',bt:'Consulta',main:true},
+ {id:'agenda',ic:'📅',t:'Agenda',main:true},{id:'bandeja',ic:'📥',t:'Bandeja inteligente'},{id:'terminos',ic:'⏱',t:'Términos'},{id:'rama',ic:'🏛',t:'Rama Judicial'},{id:'asistente',ic:'🧭',t:'Asistente'},
  {id:'solicitudes',ic:'📨',t:'Solicitudes del portal'},{id:'clientes',ic:'👥',t:'Clientes'},{id:'borradores',ic:'📝',t:'Borradores'},{id:'reportes',ic:'📊',t:'Reportes'},
  {id:'notificaciones',ic:'💬',t:'Canales'},{id:'config',ic:'⚙',t:'Configuración'}
 ];
@@ -473,11 +476,17 @@ LM.migrate=function(st){ if((st.version||1)>=2) return st; const PUB=(window.Lex
   st.procesos.forEach(p=>{ if(p.apoderado===undefined) p.apoderado=st.config.abogado||''; p.jurisprudencia=p.jurisprudencia||[]; if(p.publicar===undefined){ const d=PUB[p.id]; p.publicar=!!d; p.resumenCliente=d?d.resumen:''; (p.actuaciones||[]).forEach(a=>{ if(d&&d.acts[a.titulo]){ a.publicar=true; a.resumenCliente=d.acts[a.titulo]; } }); } });
   const demo=LM.demoData(); st.procesos.forEach(p=>{ if(p.id==='p1'&&!p.jurisprudencia.length){ const dp=demo.procesos.find(x=>x.id==='p1'); p.jurisprudencia=dp.jurisprudencia; } });
   st.version=2; return st; };
+/* Menú agrupado: el grupo se asigna por id al dibujar (incluye entradas que agregan otros módulos) */
+LM.NAV_GRUPOS=[['General',['tablero','procesos','agenda','terminos']],['Consulta judicial',['alertas','rama']],['Correo y clientes',['bandeja','solicitudes','clientes','notificaciones']],['IA y documentos',['asistente','revision','borradores','reportes']],['Ajustes',['config']]];
+LM.CONSULTA=['alertas','rama','samai','consulta'];
 function buildNav(){
-  const link=(n,cls)=>'<a href="#/'+n.id+'" data-nav="'+n.id+'" class="'+(cls||'')+'"><span class="ic" aria-hidden="true">'+n.ic+'</span><span>'+n.t+'</span></a>';
-  $('#sidenav').innerHTML=LM.NAV.map(n=>link(n)).join('');
-  $('#bottomnav').innerHTML=LM.NAV.filter(n=>n.main).map(n=>link(n)).join('')+'<a href="#" id="navMore"><span class="ic">⋯</span><span>Más</span></a>';
-  $('#sheetLinks').innerHTML=LM.NAV.map(n=>link(n)).join('');
+  const link=(n,cls,short)=>'<a href="#/'+n.id+'" data-nav="'+n.id+'" class="'+(cls||'')+'"><span class="ic" aria-hidden="true">'+n.ic+'</span><span>'+(short&&n.bt||n.t)+'</span></a>';
+  const G=LM.NAV_GRUPOS, gi=id=>{ const i=G.findIndex(g=>g[1].includes(id)); return i<0?G.length:i; };
+  const ord=LM.NAV.map((n,i)=>[n,i]).sort((a,b)=>gi(a[0].id)-gi(b[0].id)||a[1]-b[1]).map(x=>x[0]);
+  const grouped=(hcls)=>{ let cur=-1, h=''; ord.forEach(n=>{ const g=gi(n.id); if(g!==cur){ cur=g; h+='<div class="'+hcls+'" role="presentation">'+(G[g]?G[g][0]:'Otros')+'</div>'; } h+=link(n); }); return h; };
+  $('#sidenav').innerHTML=grouped('navgrp');
+  $('#bottomnav').innerHTML=LM.NAV.filter(n=>n.main).map(n=>link(n,'',true)).join('')+'<a href="#" id="navMore"><span class="ic">⋯</span><span>Más</span></a>';
+  $('#sheetLinks').innerHTML=grouped('navgrp sheetgrp');
   const open=v=>{$('#sheet').classList.toggle('open',v);$('#sheetBg').classList.toggle('open',v);};
   $('#navMore').onclick=e=>{e.preventDefault();open(true);}; $('#btnMenu').onclick=()=>open(true); $('#sheetBg').onclick=()=>open(false);
   $('#sheetLinks').addEventListener('click',()=>open(false));
@@ -486,8 +495,8 @@ function buildNav(){
 }
 LM.route=function(){
   const h=location.hash.replace(/^#\/?/,'')||'tablero'; const [name,...args]=h.split('/');
-  const v=LM.views[name]||LM.views.tablero; const navId=name==='proceso'?'procesos':name;
-  document.querySelectorAll('[data-nav]').forEach(a=>a.classList.toggle('active',a.dataset.nav===navId));
+  const v=LM.views[name]||LM.views.tablero; const navId=name==='proceso'?'procesos':name==='samai'?'alertas':name;
+  const inC=LM.CONSULTA.includes(navId); document.querySelectorAll('[data-nav]').forEach(a=>a.classList.toggle('active',a.dataset.nav===navId||(inC&&a.dataset.nav==='alertas'&&a.closest('#bottomnav'))));
   const el=$('#view'); try{ el.innerHTML=''; v(el,args.map(decodeURIComponent)); }catch(e){ console.error(e); el.innerHTML='<div class="card err">Error al cargar el módulo: '+LM.esc(e.message)+'</div>'; }
   LM.refreshChrome(); window.scrollTo(0,0);
 };
@@ -673,7 +682,7 @@ LM.msgFor=function(a,canal){ const p=LM.proc(a.procesoId)||{}; const c=LM.cli(p.
 
 V.alertas=function(el){
   const S=LM.state; const list=S.alertas.slice().sort((a,b)=>a.fecha<b.fecha?1:-1);
-  el.innerHTML='<div class="row between"><div><h1>Alertas SAMAI</h1><p class="small muted">Monitoreo <b>simulado</b>: en producción se consultaría SAMAI/CPNU '+S.config.horario.frecuencia+' veces al día en horario hábil, respetando robots.txt y límites del sitio.</p></div><div class="row"><button class="btn primary" id="sim">⟳ Simular consulta ahora</button><button class="btn" id="read">✓ Marcar todas leídas</button></div></div>'+
+  el.innerHTML='<div class="row between"><div><h2>Alertas SAMAI</h2><p class="small muted">Monitoreo <b>simulado</b>: en producción se consultaría SAMAI/CPNU '+S.config.horario.frecuencia+' veces al día en horario hábil, respetando robots.txt y límites del sitio.</p></div><div class="row"><button class="btn primary" id="sim">⟳ Simular consulta ahora</button><button class="btn" id="read">✓ Marcar todas leídas</button></div></div>'+
    '<div class="card row between" style="margin:.6rem 0"><label class="row" style="margin:0"><input type="checkbox" id="auto"'+(S.config.autoSim?' checked':'')+'> Simulación automática (una novedad cada 45 s mientras la app esté abierta)</label><span class="small muted">Última consulta: '+(S.simLog[0]?new Date(S.simLog[0].at).toLocaleString('es-CO'):'—')+'</span></div><div class="list">'+
    list.map(a=>{ const p=LM.proc(a.procesoId)||{}; return '<div class="item'+(a.leida?'':' assist '+a.nivel)+'"><div class="row between"><b>'+E(a.titulo)+'</b><span class="row">'+(a.leida?'':'<span class="chip info">Nueva</span>')+'<span class="chip '+(a.nivel==='alta'?'danger':a.nivel==='media'?'warn':'')+'">'+a.nivel+'</span></span></div><div class="small">'+E(a.texto)+'</div><div class="small muted mono">'+LM.fmtRad(p.radicado)+' · '+a.fecha.replace('T',' ')+'</div><div class="row" style="margin-top:.4rem"><a class="btn sm" href="#/proceso/'+p.id+'">Ver proceso</a><button class="btn sm" data-prev="'+a.id+'">💬 Vista previa WhatsApp / correo</button>'+(a.leida?'':'<button class="btn sm" data-r="'+a.id+'">Marcar leída</button>')+'</div></div>'; }).join('')+'</div>';
   el.querySelector('#sim').onclick=()=>{ LM.simulateSamai(true); V.alertas(el); };
@@ -1542,7 +1551,7 @@ function sujHtml(L){ return L.length?'<table><tr><th>Tipo</th><th>Nombre o razó
 function actsHtml(L){ return '<div class="list">'+L.map(a=>'<div class="item"><div class="row between"><b>'+E(a.actuacion)+'</b><span class="chip">'+LM.fmt(day(a.fechaActuacion))+'</span></div>'+(a.anotacion?'<div class="small">'+E(a.anotacion)+'</div>':'')+(a.fechaInicial?'<div class="small muted">Término: '+LM.fmt(day(a.fechaInicial))+' → '+LM.fmt(day(a.fechaFinal))+'</div>':'')+'</div>').join('')+'</div>'; }
 V.rama=function(el,args){ const S=LM.state; const pre=(args&&args[0]||'').replace(/\D/g,'');
   const conRad=S.procesos.filter(p=>(p.radicado||'').replace(/\D/g,'').length===23);
-  el.innerHTML='<h1>🏛 Rama Judicial</h1><p class="small muted">Consulta de Procesos Nacional Unificada (CPNU) de la Rama Judicial: juzgados y tribunales (incluidos los administrativos). Los procesos del Consejo de Estado y de algunos tribunales con SAMAI se consultan en SAMAI. Cada consulta se hace solo cuando usted pulsa un botón.</p>'+
+  el.innerHTML='<h2>🏛 Rama Judicial</h2><p class="small muted">Consulta de Procesos Nacional Unificada (CPNU) de la Rama Judicial: juzgados y tribunales (incluidos los administrativos). Los procesos del Consejo de Estado y de algunos tribunales con SAMAI se consultan en SAMAI. Cada consulta se hace solo cuando usted pulsa un botón.</p>'+
    '<div class="card"><h2>Buscar</h2><div class="row" role="tablist"><button class="btn sm primary" data-m="rad">Por radicado</button><button class="btn sm" data-m="nom">Por nombre o razón social</button><button class="btn sm" data-m="man">Modo manual</button></div><div id="rm-form" style="margin-top:.6rem"></div></div><div id="rm-res"></div>'+
    '<div class="card" style="margin-top:1rem"><div class="row between"><h2>Verificar novedades</h2><button class="btn primary" id="rm-all"'+(conRad.length?'':' disabled')+'>⟳ Verificar procesos importados</button></div><p class="small muted">Compara la última actuación guardada de cada proceso con la Rama Judicial y crea alertas por cada actuación nueva.</p><div class="list" id="rm-list">'+
    (conRad.filter(p=>p.rama).map(p=>'<div class="item row between"><div><b class="mono">'+LM.fmtRad(p.radicado)+'</b><div class="small">'+E(p.despacho||'')+'</div><div class="small muted">Última guardada: '+(p.rama.ultima?LM.fmt(p.rama.ultima.fecha)+' · '+E(p.rama.ultima.titulo||''):'—')+' · consultado '+new Date(p.rama.consultado).toLocaleString('es-CO')+'</div></div><div class="row"><a class="btn sm" href="#/proceso/'+p.id+'">Ver</a><button class="btn sm" data-ver="'+p.id+'">⟳ Verificar</button></div></div>').join('')||'<p class="small muted">Aún no hay procesos importados desde la Rama Judicial.</p>')+'</div></div>';
@@ -1638,13 +1647,24 @@ LM.bandejaAnalizar=async function(m,signal){ if(!LM.iaReady()) return simular(m)
 /* Calcula el vencimiento si la IA dio días pero no fecha (días hábiles con festivos de Colombia del calendario de LexMonitor) */
 function vence(r,m){ const T=r.termino; if(!T||!T.hay) return ''; if(T.vence&&/^\d{4}-\d{2}-\d{2}$/.test(T.vence)) return T.vence; const n=parseInt(T.dias,10); if(!n) return ''; const d=/^\d{4}-\d{2}-\d{2}$/.test(T.desde||'')?T.desde:fechaCorreo(m);
   return T.tipo==='calendario'?LM.iso(LM.addDays(LM.parse(d),n)):LM.addHabiles(d,n); }
+function crearAlerta(b){ const S=LM.state; const r=b.r, p=LM.proc(b.procesoId); const now=new Date(), hh=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+    const a={id:LM.uid(),fecha:LM.iso(LM.today())+'T'+hh,procesoId:b.procesoId,titulo:'Correo · '+(CAT[r.categoria]||CAT.cliente)[0].replace(/^\S+\s/,'')+': '+(b.m.asunto||'').slice(0,90),texto:(r.resumen||'')+(b.vence?' Vence: '+LM.fmt(b.vence)+'.':''),leida:false,nivel:r.prioridad==='alta'?'alta':r.prioridad==='baja'?'baja':'media',fuente:'Bandeja inteligente'};
+    S.alertas.push(a); b.alertaId=a.id;
+    if(p&&b.vence&&!b.eventoId){ const ev={id:LM.uid(),fecha:b.vence,tipo:'vencimiento',titulo:(r.termino.descripcion||'Vence término')+' (correo)',preparada:false}; p.eventos=p.eventos||[]; p.eventos.push(ev); b.eventoId=ev.id; } }
+/* Ingresa un correo analizado (pegado o traído del buzón conectado) a la bandeja local: asociación, vencimiento y alerta */
+LM.bandejaIngresar=function(m,r,srv){ const S=LM.state; S.bandeja=S.bandeja||[]; if(srv&&S.bandeja.some(x=>x.srv&&x.srv.id===srv.id)) return null;
+  const b={id:LM.uid(),at:new Date().toISOString(),m:{de:m.de,para:m.para||'',asunto:m.asunto,fecha:m.fecha,cuerpo:String(m.cuerpo||'').slice(0,20000)},r};
+  if(srv) b.srv=srv; r.respuesta=r.respuesta||{asunto:'',cuerpo:''}; r.termino=r.termino||{hay:false}; if(!CAT[r.categoria]) r.categoria=r.categoria==='sin_clasificar'?'cliente':'cliente';
+  const p=asociar(b.m,r.radicado); b.procesoId=p?p.id:null; b.vence=vence(r,b.m); if(r.categoria!=='sin_importancia') crearAlerta(b);
+  S.bandeja.push(b); S.bandeja=S.bandeja.slice(-100); return b; };
+LM.bandejaAbrir=id=>{ LM._bxOpen={id,msg:''}; if(/^#\/bandeja/.test(location.hash)) LM.route(); else location.hash='#/bandeja'; };
 V.bandeja=function(el){ const S=LM.state; S.bandeja=S.bandeja||[];
-  el.innerHTML='<h1>📥 Bandeja inteligente</h1><p class="small muted">Pegue un correo o importe un archivo <b>.eml</b>. La IA lo clasifica, extrae radicado, fechas y términos, lo asocia al proceso, crea la alerta y redacta una respuesta en <b>borrador</b>. LexMonitor <b>nunca envía correos</b>: usted revisa, copia o abre su programa de correo.</p>'+
-   '<div class="card"><div class="row between"><h2>Nuevo correo</h2><div class="row"><span class="small muted">Ejemplos:</span>'+EJ.map((x,i)=>'<button class="btn sm" data-ej="'+i+'">'+E(x.n)+'</button>').join('')+'</div></div>'+
+  el.innerHTML='<h1>📥 Bandeja inteligente</h1><p class="small muted">Conecte su buzón (Gmail, Outlook o IMAP) o pegue un correo / importe un archivo <b>.eml</b>. La IA lo clasifica, extrae radicado, fechas y términos, lo asocia al proceso, crea la alerta y redacta una respuesta en <b>borrador</b>. LexMonitor <b>nunca envía correos</b>: usted revisa, copia, abre su programa de correo o guarda la respuesta en su carpeta Borradores.</p>'+
+   '<div id="bx-buzon"></div><div class="card"><div class="row between"><h2>Pegar o importar un correo</h2><div class="row"><span class="small muted">Ejemplos:</span>'+EJ.map((x,i)=>'<button class="btn sm" data-ej="'+i+'">'+E(x.n)+'</button>').join('')+'</div></div>'+
    '<label>Correo (con cabeceras De/Asunto/Fecha si las tiene, o solo el texto)<textarea id="bx-raw" rows="9" placeholder="From: …&#10;Subject: …&#10;&#10;Texto del correo"></textarea></label><div class="row"><label class="btn sm" style="cursor:pointer">📎 Importar .eml / .txt<input type="file" id="bx-file" accept=".eml,.txt,message/rfc822,text/plain" hidden></label><span class="sp"></span><button class="btn primary" id="bx-go">🤖 Analizar con IA</button></div><p class="small" id="bx-st">'+(LM.iaReady()?'<span class="chip ok">IA activa</span>':'<span class="chip warn">Sin clave ni código</span> Se usará un análisis <b>simulado</b> por reglas. Active la IA en <a href="#/config">⚙ Configuración</a>.')+'</p></div>'+
    '<div id="bx-res"></div><h2 style="margin-top:1rem">Correos analizados ('+S.bandeja.length+')</h2><div class="list" id="bx-list">'+(S.bandeja.slice().reverse().map(b=>{ const c=CAT[b.r.categoria]||CAT.cliente, p=LM.proc(b.procesoId);
      return '<div class="item"><div class="row between"><b>'+E(b.m.asunto||'(sin asunto)')+'</b><span class="chip '+c[1]+'">'+c[0]+'</span></div><div class="small muted">'+E(b.m.de)+' · '+new Date(b.at).toLocaleString('es-CO')+(p?' · <a href="#/proceso/'+p.id+'">'+LM.fmtRad(p.radicado)+'</a>':'')+(b.vence?' · vence <b>'+LM.fmt(b.vence)+'</b>':'')+'</div><div class="small">'+E(b.r.resumen||'')+'</div><div class="row" style="margin-top:.3rem"><button class="btn sm" data-ab="'+b.id+'">Abrir</button><button class="btn sm" data-del="'+b.id+'">Quitar</button></div></div>'; }).join('')||'<p class="small muted">Aún no hay correos analizados.</p>')+'</div>'+
-   '<div class="card" style="margin-top:1rem"><h2>Fase 2 · Conexión automática con Gmail, Outlook o IMAP</h2><ul class="small"><li><b>Gmail y Outlook (Microsoft 365)</b>: conexión por OAuth 2.0 (el abogado autoriza sin entregar su contraseña) y lectura de la bandeja desde un servidor propio de LexMonitor, que también guardaría los tokens de forma cifrada.</li><li><b>Verificación de Google</b>: leer correo usa permisos «restringidos» de Gmail; para usuarios externos Google exige verificar la app y una evaluación de seguridad anual (CASA) por un tercero. Mientras tanto se puede operar en «modo prueba» con hasta 100 usuarios autorizados.</li><li><b>IMAP</b> (otros proveedores): usuario y contraseña de aplicación, guardados cifrados en el servidor.</li><li><b>Confidencialidad</b>: el nivel gratuito de Gemini puede usar los datos para mejorar los productos de Google. Para correos de clientes reales se debe usar el <b>plan pago</b> de la API de Gemini (o Vertex AI), cuyos datos no se usan para entrenamiento, y anonimizar cuando sea posible.</li><li>Las respuestas seguirán siendo <b>borradores</b>; el envío siempre lo decide el abogado.</li></ul></div>';
+   '';
   const raw=el.querySelector('#bx-raw'), res=el.querySelector('#bx-res');
   el.querySelectorAll('[data-ej]').forEach(b=>b.onclick=()=>{ raw.value=ej(+b.dataset.ej); raw.focus(); });
   el.querySelector('#bx-file').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; if(f.size>3e6){ LM.toast('Archivo demasiado grande (máx. 3 MB)'); return; } raw.value=await f.text(); LM.toast('Correo cargado: '+f.name); };
@@ -1655,26 +1675,74 @@ V.bandeja=function(el){ const S=LM.state; S.bandeja=S.bandeja||[];
      ((r.fechas||[]).length?'<ul class="small">'+r.fechas.map(f=>'<li>'+E(f.fecha)+' · '+E(f.descripcion||'')+'</li>').join('')+'</ul>':'')+
      '<label>Proceso asociado<select id="bx-p"><option value="">— Sin asociar —</option>'+procs.map(p=>'<option value="'+p.id+'"'+(p.id===b.procesoId?' selected':'')+'>'+LM.fmtRad(p.radicado)+' · '+E((p.demandante||'').slice(0,40))+'</option>').join('')+'</select></label>'+
      '<div class="small muted">'+(b.alertaId?'✅ Alerta creada'+(b.eventoId?' y vencimiento agregado a la agenda':'')+'.':'Sin alerta (correo sin importancia o sin proceso).')+'</div>'+
-     (r.categoria!=='sin_importancia'||r.respuesta.cuerpo?'<h3>Respuesta (borrador editable)</h3><label>Para<input id="bx-to" value="'+E(addr(m.de))+'"></label><label>Asunto<input id="bx-as" value="'+E(r.respuesta.asunto||('Re: '+(m.asunto||'')))+'"></label><textarea id="bx-body" rows="9">'+E(r.respuesta.cuerpo||'')+'</textarea><div class="row"><button class="btn" id="bx-copy">📋 Copiar</button><button class="btn primary" id="bx-mail">✉ Abrir en mi correo</button><span class="small muted">No se envía nada automáticamente.</span></div>':'')+'</div>';
+     (r.categoria!=='sin_importancia'||r.respuesta.cuerpo?'<h3>Respuesta (borrador editable)</h3><label>Para<input id="bx-to" value="'+E(addr(m.de))+'"></label><label>Asunto<input id="bx-as" value="'+E(r.respuesta.asunto||('Re: '+(m.asunto||'')))+'"></label><textarea id="bx-body" rows="9">'+E(r.respuesta.cuerpo||'')+'</textarea><div class="row"><button class="btn" id="bx-copy">📋 Copiar</button><button class="btn primary" id="bx-mail">✉ Abrir en mi correo</button>'+(b.srv?'<button class="btn primary" id="bx-draft">📝 Crear borrador en mi buzón</button>':'')+'<span class="small muted">No se envía nada automáticamente.</span></div>':'')+'</div>';
     const sel=res.querySelector('#bx-p'); sel.onchange=()=>{ b.procesoId=sel.value||null; const a=S.alertas.find(x=>x.id===b.alertaId); if(a) a.procesoId=b.procesoId; else if(b.procesoId&&r.categoria!=='sin_importancia') crearAlerta(b); LM.save(); show(b); };
     const g=id=>res.querySelector(id); const save=()=>{ if(!g('#bx-body')) return; r.respuesta={asunto:g('#bx-as').value,cuerpo:g('#bx-body').value}; LM.save(); };
     if(g('#bx-body')){ ['#bx-as','#bx-body'].forEach(i=>g(i).addEventListener('change',save));
       g('#bx-copy').onclick=async()=>{ save(); const t='Para: '+g('#bx-to').value+'\nAsunto: '+g('#bx-as').value+'\n\n'+g('#bx-body').value; try{ await navigator.clipboard.writeText(t); LM.toast('📋 Respuesta copiada'); }catch(e){ g('#bx-body').select(); document.execCommand('copy'); LM.toast('📋 Respuesta copiada'); } };
+      const dr=g('#bx-draft'); if(dr) dr.onclick=async()=>{ save(); dr.disabled=true; dr.textContent='⏳ Creando borrador…'; try{ const x=await LM.correoBorrador(b,{to:g('#bx-to').value,subject:g('#bx-as').value,body:g('#bx-body').value}); b.borrador=x; LM.save(); dr.textContent='✅ Borrador creado en '+x.donde; LM.toast('📝 Borrador guardado en su carpeta Borradores (no se envió)'); }catch(e){ dr.disabled=false; dr.textContent='📝 Crear borrador en mi buzón'; LM.toast('⚠ '+e.message); } };
       g('#bx-mail').onclick=()=>{ save(); location.href='mailto:'+encodeURIComponent(g('#bx-to').value)+'?subject='+encodeURIComponent(g('#bx-as').value)+'&body='+encodeURIComponent(g('#bx-body').value.slice(0,1800)); }; } };
-  function crearAlerta(b){ const r=b.r, p=LM.proc(b.procesoId); const now=new Date(), hh=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-    const a={id:LM.uid(),fecha:LM.iso(LM.today())+'T'+hh,procesoId:b.procesoId,titulo:'Correo · '+(CAT[r.categoria]||CAT.cliente)[0].replace(/^\S+\s/,'')+': '+(b.m.asunto||'').slice(0,90),texto:(r.resumen||'')+(b.vence?' Vence: '+LM.fmt(b.vence)+'.':''),leida:false,nivel:r.prioridad==='alta'?'alta':r.prioridad==='baja'?'baja':'media',fuente:'Bandeja inteligente'};
-    S.alertas.push(a); b.alertaId=a.id;
-    if(p&&b.vence&&!b.eventoId){ const ev={id:LM.uid(),fecha:b.vence,tipo:'vencimiento',titulo:(r.termino.descripcion||'Vence término')+' (correo)',preparada:false}; p.eventos=p.eventos||[]; p.eventos.push(ev); b.eventoId=ev.id; } }
   el.querySelector('#bx-go').onclick=async e=>{ const txt=raw.value.trim(); if(txt.length<20){ LM.toast('Pegue el correo o cargue un .eml'); return; } const btn=e.target, st=el.querySelector('#bx-st'); btn.disabled=true; btn.textContent='⏳ Analizando…'; const t0=Date.now();
-    try{ const m=LM.parseEmail(txt); const r=await LM.bandejaAnalizar(m); const b={id:LM.uid(),at:new Date().toISOString(),m:{de:m.de,para:m.para,asunto:m.asunto,fecha:m.fecha,cuerpo:m.cuerpo.slice(0,20000)},r};
-      const p=asociar(m,r.radicado); b.procesoId=p?p.id:null; b.vence=vence(r,m); if(r.categoria!=='sin_importancia') crearAlerta(b);
-      S.bandeja.push(b); S.bandeja=S.bandeja.slice(-100); LM.save(); LM.refreshChrome(); st.innerHTML='✓ Analizado en '+Math.round((Date.now()-t0)/1000)+' s'+(r.simulado?' (simulación sin IA)':''); LM._bxOpen={id:b.id,msg:st.innerHTML}; V.bandeja(el); return; }
+    try{ const m=LM.parseEmail(txt); const r=await LM.bandejaAnalizar(m); const b=LM.bandejaIngresar(m,r); LM.save(); LM.refreshChrome(); st.innerHTML='✓ Analizado en '+Math.round((Date.now()-t0)/1000)+' s'+(r.simulado?' (simulación sin IA)':''); LM._bxOpen={id:b.id,msg:st.innerHTML}; V.bandeja(el); return; }
     catch(err){ st.innerHTML='<span class="err">⚠ '+E(err.message)+'</span>'; }
     btn.disabled=false; btn.textContent='🤖 Analizar con IA'; };
   el.querySelectorAll('[data-ab]').forEach(x=>x.onclick=()=>{ show(S.bandeja.find(b=>b.id===x.dataset.ab)); res.scrollIntoView(); });
   if(LM._bxOpen){ const o=LM._bxOpen; LM._bxOpen=null; const b=S.bandeja.find(x=>x.id===o.id); if(b){ el.querySelector('#bx-st').innerHTML=o.msg; show(b); setTimeout(()=>res.scrollIntoView({behavior:'smooth'}),50); } }
+  if(LM.correoCard) LM.correoCard(el.querySelector('#bx-buzon'),()=>V.bandeja(el));
   el.querySelectorAll('[data-del]').forEach(x=>x.onclick=()=>{ S.bandeja=S.bandeja.filter(b=>b.id!==x.dataset.del); LM.save(); V.bandeja(el); });
 };
+})();
+
+</script>
+<script>
+/* Correo · conexión del buzón del abogado (Gmail, Outlook/Microsoft 365, IMAP) a través del servidor LexMonitor.
+   El servidor guarda las credenciales cifradas, revisa el buzón cada 15 minutos y clasifica con IA. LexMonitor solo crea BORRADORES: nunca envía. */
+(function(){
+const LM=window.LM, E=LM.esc; const NOM={google:'Gmail',microsoft:'Outlook / Microsoft 365',imap:'IMAP'};
+/* Regreso del OAuth: #/bandeja?mail=ok | #/bandeja?mail_error=… */
+(function(){ const m=location.hash.match(/^#\/bandeja\?(mail|mail_error)=([^&]*)/); if(!m) return; const msg=decodeURIComponent(m[2]);
+  history.replaceState(null,'',location.pathname+location.search+'#/bandeja'); LM._correoAviso=m[1]==='mail'?{ok:true,t:'✅ Buzón conectado. La primera sincronización puede tardar unos segundos.'}:{ok:false,t:'⚠ No se pudo conectar el buzón: '+msg}; })();
+const cod=()=>(LM.gemCode&&LM.gemCode())||'';
+LM.correoFetch=async function(path,o){ o=o||{}; const c=cod(); const h=Object.assign({},o.body?{'Content-Type':'application/json'}:{},c?{'X-Codigo':c}:{});
+  let r,j; try{ r=await fetch(LM.PROXY_URL+path,{method:o.method||'GET',headers:h,body:o.body?JSON.stringify(o.body):undefined}); j=await r.json(); }catch(e){ throw new Error('No se pudo conectar con el servidor de correo de LexMonitor.'); }
+  if(!r.ok||j.error) throw new Error((j.error&&j.error.message)||('Error '+r.status)); return j; };
+LM.correoBorrador=async function(b,d){ const j=await LM.correoFetch('/mail/draft',{method:'POST',body:{id:b.srv.id,to:d.to,subject:d.subject,body:d.body}}); if(j.enviado!==false) throw new Error('Respuesta inesperada del servidor');
+  return {donde:NOM[j.provider]||j.provider,id:j.borrador&&j.borrador.id,web:j.borrador&&j.borrador.web,at:new Date().toISOString()}; };
+/* Lleva a la bandeja local los correos clasificados por el servidor (crea alertas solo para los nuevos) */
+LM.correoIngresar=function(items,provider){ let n=0; (items||[]).slice().reverse().forEach(it=>{ const b=LM.bandejaIngresar({de:it.de,para:it.para,asunto:it.asunto,fecha:it.fecha,cuerpo:it.cuerpo},JSON.parse(JSON.stringify(it.r||{categoria:'cliente'})),{id:it.id,provider}); if(b) n++; }); if(n){ LM.save(); LM.refreshChrome(); } return n; };
+LM.correoCard=async function(host,rerender){ if(!host) return; const aviso=LM._correoAviso; LM._correoAviso=null;
+  host.innerHTML='<div class="card" style="margin-bottom:1rem"><h2>📬 Buzón conectado</h2><p class="small muted">⏳ Consultando el estado de la conexión…</p></div>';
+  let st; try{ st=await LM.correoFetch('/mail/status'); }catch(e){ host.innerHTML='<div class="card" style="margin-bottom:1rem"><h2>📬 Buzón conectado</h2><p class="small"><span class="chip warn">Sin conexión con el servidor</span> '+E(e.message)+' Puede seguir pegando o importando correos abajo.</p></div>'; return; }
+  const C=st.configurado||{}, cx=st.conexion; const chip=ok=>ok?'<span class="chip ok">disponible</span>':'<span class="chip warn">pendiente de configurar</span>';
+  let h='<div class="card" style="margin-bottom:1rem"><div class="row between"><h2>📬 Buzón conectado</h2>'+(cx?'<span class="chip ok">'+E(NOM[cx.provider]||cx.provider)+' · '+E(cx.email||'')+'</span>':'<span class="chip">sin conectar</span>')+'</div>'+
+   (aviso?'<p class="small '+(aviso.ok?'':'err')+'">'+E(aviso.t)+'</p>':'');
+  if(!cod()) h+='<p class="small"><span class="chip warn">Requiere código de acceso</span> Para conectar su buzón escriba su código en <a href="#/config">⚙ Configuración → Inteligencia artificial</a>. Mientras tanto puede pegar o importar correos abajo.</p>';
+  if(cx){ h+='<p class="small">Revisión automática cada 15 minutos. Última sincronización: <b>'+(cx.ultimaSync?new Date(cx.ultimaSync).toLocaleString('es-CO'):'—')+'</b> · correos clasificados hoy: '+(cx.usadosHoy||0)+' de '+cx.limiteDia+'.</p><div class="row"><button class="btn primary" id="cx-sync">⟳ Sincronizar ahora</button><button class="btn" id="cx-off">Desconectar</button></div><div id="cx-msg" class="small muted" style="margin-top:.4rem"></div>'; }
+  else if(cod()){ h+='<p class="small">Conecte su correo para que LexMonitor traiga y clasifique los correos nuevos. Las respuestas se guardan como <b>borradores</b> en su buzón; usted decide si las envía.</p><div class="row">'+
+     '<button class="btn primary" id="cx-g"'+(C.google?'':' disabled')+'>Conectar Gmail</button>'+chip(C.google)+'<button class="btn primary" id="cx-m"'+(C.microsoft?'':' disabled')+'>Conectar Outlook</button>'+chip(C.microsoft)+'</div>'+
+     '<details style="margin-top:.6rem"><summary class="small"><b>IMAP</b> (correo del hosting o de otro proveedor)</summary><div class="grid g2" style="margin-top:.5rem"><label>Servidor IMAP<input id="cx-host" placeholder="mail.sufirma.com"></label><label>Usuario<input id="cx-user" autocomplete="username" placeholder="abogado@sufirma.com"></label></div><label>Contraseña de aplicación<input id="cx-pass" type="password" autocomplete="current-password"></label><p class="small muted">IMAP con TLS (puerto 993). Use una contraseña de aplicación, no la principal. Se guarda cifrada en el servidor; los borradores se guardan en su carpeta Borradores.</p><button class="btn" id="cx-imap">Conectar IMAP</button></details>'; }
+  h+='<p class="small muted" style="margin-top:.6rem">🔒 Confidencialidad: el servidor usa la API de Gemini; para correos reales de clientes use el plan pago de Gemini (sin uso de datos para entrenamiento). Ver la guía de configuración del correo.</p></div>';
+  host.innerHTML=h; const q=s=>host.querySelector(s), msg=t=>{ const m=q('#cx-msg'); if(m) m.innerHTML=t; };
+  const go=pv=>{ location.href=LM.PROXY_URL+'/mail/oauth/start?provider='+pv+'&codigo='+encodeURIComponent(cod())+'&ret='+encodeURIComponent(location.href.split('#')[0]); };
+  q('#cx-g')&&(q('#cx-g').onclick=()=>go('google')); q('#cx-m')&&(q('#cx-m').onclick=()=>go('microsoft'));
+  q('#cx-imap')&&(q('#cx-imap').onclick=async e=>{ const b=e.target; b.disabled=true; b.textContent='⏳ Probando conexión…'; try{ await LM.correoFetch('/mail/imap',{method:'POST',body:{host:q('#cx-host').value,port:993,user:q('#cx-user').value,pass:q('#cx-pass').value}}); LM._correoAviso={ok:true,t:'✅ Buzón IMAP conectado.'}; rerender(); }catch(err){ b.disabled=false; b.textContent='Conectar IMAP'; LM.toast('⚠ '+err.message); } });
+  if(cx){ const ingest=j=>{ const n=LM.correoIngresar(j.items,cx.provider); return n; };
+    try{ const j=await LM.correoFetch('/mail/items'); const n=ingest(j); if(n){ LM.toast('📬 '+n+' correos nuevos del buzón'); rerender(); return; } }catch(e){ msg('⚠ '+E(e.message)); }
+    q('#cx-sync').onclick=async e=>{ const b=e.target; b.disabled=true; b.textContent='⏳ Sincronizando…'; try{ const j=await LM.correoFetch('/mail/sync',{method:'POST'}); const n=ingest(j);
+        LM._correoAviso={ok:!j.error,t:j.error?'⚠ '+j.error:j.limite?'Se alcanzó el límite diario de clasificación.':(n?'📬 '+n+' correos nuevos clasificados.':'Sin correos nuevos.')}; rerender(); }catch(err){ b.disabled=false; b.textContent='⟳ Sincronizar ahora'; msg('⚠ '+E(err.message)); } };
+    q('#cx-off').onclick=async()=>{ if(!confirm('¿Desconectar el buzón? Se borran del servidor las credenciales y los correos clasificados (los que ya están en LexMonitor se conservan).')) return; try{ await LM.correoFetch('/mail/disconnect',{method:'POST'}); LM._correoAviso={ok:true,t:'Buzón desconectado.'}; rerender(); }catch(err){ msg('⚠ '+E(err.message)); } }; } };
+})();
+
+</script>
+<script>
+/* Consulta judicial: una sola sección con dos pestañas, SAMAI (#/alertas, alias #/samai) y Rama Judicial (#/rama). */
+(function(){
+const LM=window.LM, V=LM.views; const K='lm_consulta_tab';
+const tabs=on=>'<div class="cj-head"><h1 style="margin-bottom:.3rem">⚖ Consulta judicial</h1><nav class="cj-tabs" role="tablist" aria-label="Fuente de consulta"><a href="#/alertas" role="tab" aria-selected="'+(on==='samai')+'" class="'+(on==='samai'?'on':'')+'">🔔 SAMAI <span class="small muted">Consejo de Estado y tribunales</span></a><a href="#/rama" role="tab" aria-selected="'+(on==='rama')+'" class="'+(on==='rama'?'on':'')+'">🏛 Rama Judicial <span class="small muted">CPNU · juzgados y tribunales</span></a></nav></div>';
+function wrap(name,tab){ const orig=V[name]; V[name]=function(el,args){ if(el.classList&&el.classList.contains('cj-body')) return orig(el,args); try{ localStorage.setItem(K,tab); }catch(e){}
+  el.innerHTML=tabs(tab)+'<div class="cj-body"></div>'; return orig(el.querySelector('.cj-body'),args); }; }
+wrap('alertas','samai'); wrap('rama','rama'); V.samai=V.alertas;
+V.consulta=function(el,args){ let t='samai'; try{ t=localStorage.getItem(K)||'samai'; }catch(e){} location.replace('#/'+(t==='rama'?'rama':'alertas')); };
 })();
 
 </script>
