@@ -5,6 +5,7 @@ const KK='lm_gemini_key', KM='lm_gemini_model', DEF_MODEL='auto', MAXC=500000;
 const API=window.LM_TEST_API||'https://generativelanguage.googleapis.com/v1beta/models/';
 /* Proxy con códigos de prueba (Cloudflare Worker, ver /proxy). Cambie esta constante al desplegar. */
 const PROXY_URL=(window.LM_PROXY||'https://lexmonitor-proxy.gdz87.workers.dev').replace(/\/$/,'');
+LM.PROXY_URL=PROXY_URL;
 const KMODO='lm_ia_modo', KCOD='lm_ia_codigo';
 const lsg=(k,d)=>{ try{ return localStorage.getItem(k)||d; }catch(e){ return d; } };
 LM.iaModo=()=>lsg(KMODO,'clave')==='codigo'?'codigo':'clave';

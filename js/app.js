@@ -4,7 +4,7 @@ const LM=window.LM, $=s=>document.querySelector(s);
 LM.$=$; LM.views={};
 LM.NAV=[
  {id:'tablero',ic:'▦',t:'Tablero',main:true},{id:'procesos',ic:'📁',t:'Procesos',main:true},{id:'alertas',ic:'🔔',t:'Alertas SAMAI',main:true},
- {id:'agenda',ic:'📅',t:'Agenda',main:true},{id:'terminos',ic:'⏱',t:'Términos'},{id:'asistente',ic:'🧭',t:'Asistente'},
+ {id:'agenda',ic:'📅',t:'Agenda',main:true},{id:'rama',ic:'🏛',t:'Rama Judicial'},{id:'bandeja',ic:'📥',t:'Bandeja inteligente'},{id:'terminos',ic:'⏱',t:'Términos'},{id:'asistente',ic:'🧭',t:'Asistente'},
  {id:'solicitudes',ic:'📨',t:'Solicitudes del portal'},{id:'clientes',ic:'👥',t:'Clientes'},{id:'borradores',ic:'📝',t:'Borradores'},{id:'reportes',ic:'📊',t:'Reportes'},
  {id:'notificaciones',ic:'💬',t:'Canales'},{id:'config',ic:'⚙',t:'Configuración'}
 ];
