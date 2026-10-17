@@ -456,7 +456,7 @@ const LM=window.LM, $=s=>document.querySelector(s);
 LM.$=$; LM.views={};
 LM.NAV=[
  {id:'tablero',ic:'▦',t:'Tablero',main:true},{id:'procesos',ic:'📁',t:'Procesos',main:true},{id:'alertas',ic:'🔔',t:'SAMAI',bt:'Consulta',main:true},
- {id:'agenda',ic:'📅',t:'Agenda',main:true},{id:'bandeja',ic:'📥',t:'Bandeja inteligente'},{id:'terminos',ic:'⏱',t:'Términos'},{id:'rama',ic:'🏛',t:'Rama Judicial'},{id:'asistente',ic:'🧭',t:'Asistente'},
+ {id:'agenda',ic:'📅',t:'Agenda',main:true},{id:'bandeja',ic:'📥',t:'Bandeja inteligente'},{id:'terminos',ic:'⏱',t:'Términos'},{id:'rama',ic:'🏛',t:'Rama Judicial'},{id:'siugj',ic:'⚖',t:'SIUGJ laboral'},{id:'radicacion',ic:'📤',t:'Radicación laboral'},{id:'asistente',ic:'🧭',t:'Asistente'},
  {id:'solicitudes',ic:'📨',t:'Solicitudes del portal'},{id:'clientes',ic:'👥',t:'Clientes'},{id:'borradores',ic:'📝',t:'Borradores'},{id:'reportes',ic:'📊',t:'Reportes'},
  {id:'notificaciones',ic:'💬',t:'Canales'},{id:'config',ic:'⚙',t:'Configuración'}
 ];
@@ -479,8 +479,8 @@ LM.migrate=function(st){ if((st.version||1)>=2) return st; const PUB=(window.Lex
   const demo=LM.demoData(); st.procesos.forEach(p=>{ if(p.id==='p1'&&!p.jurisprudencia.length){ const dp=demo.procesos.find(x=>x.id==='p1'); p.jurisprudencia=dp.jurisprudencia; } });
   st.version=2; return st; };
 /* Menú agrupado: el grupo se asigna por id al dibujar (incluye entradas que agregan otros módulos) */
-LM.NAV_GRUPOS=[['General',['tablero','procesos','agenda','terminos']],['Consulta judicial',['alertas','rama']],['Correo y clientes',['bandeja','solicitudes','clientes','notificaciones']],['IA y documentos',['asistente','revision','borradores','reportes']],['Ajustes',['config']]];
-LM.CONSULTA=['alertas','rama','samai','consulta'];
+LM.NAV_GRUPOS=[['General',['tablero','procesos','agenda','terminos']],['Consulta judicial',['alertas','rama','siugj','radicacion']],['Correo y clientes',['bandeja','solicitudes','clientes','notificaciones']],['IA y documentos',['asistente','revision','borradores','reportes']],['Ajustes',['config']]];
+LM.CONSULTA=['alertas','rama','siugj','samai','consulta'];
 function buildNav(){
   const link=(n,cls,short)=>'<a href="#/'+n.id+'" data-nav="'+n.id+'" class="'+(cls||'')+'"><span class="ic" aria-hidden="true">'+n.ic+'</span><span>'+(short&&n.bt||n.t)+'</span></a>';
   const G=LM.NAV_GRUPOS, gi=id=>{ const i=G.findIndex(g=>g[1].includes(id)); return i<0?G.length:i; };
@@ -1622,6 +1622,7 @@ const EJ=[
  {n:'Notificación de auto (Consejo de Estado)',t:'From: Secretaría Sección Quinta <secgeneral@consejodeestado.gov.co>\nTo: abogado@ejemplo.test\nSubject: NOTIFICACIÓN AUTO RADICADO 11001-03-28-000-2026-00045-00\nDate: {HOY}\n\nSeñor(a) apoderado(a):\n\nPor medio del presente se notifica el auto de fecha {AYER}, proferido dentro del medio de control de nulidad electoral con radicado 11001032800020260004500, demandante Hernán Pulido Suesca (ficticio), mediante el cual se INADMITE la demanda y se concede el término de TRES (3) DÍAS para que la parte actora la corrija, so pena de rechazo (art. 276 CPACA).\n\nEl término empezará a correr a partir del día siguiente a la recepción de este mensaje.\n\nCordialmente,\nSecretaría General (mensaje ficticio de ejemplo)'},
  {n:'Consulta de una clienta',t:'From: Mariela Toquica <mariela.t@ejemplo.test>\nTo: abogado@ejemplo.test\nSubject: ¿Qué pasó con mi tutela?\nDate: {HOY}\n\nDoctor, buenas tardes. Me llegó un correo del juzgado de Duitama diciendo que negaron la tutela contra la EPS (radicado 15238-40-03-001-2026-00218-00). No entiendo bien qué significa ni si todavía se puede hacer algo, porque el procedimiento lo necesito pronto. ¿Me puede llamar o explicarme por aquí?\n\nMil gracias,\nMariela'},
  {n:'Boletín sin importancia',t:'From: Boletín Jurídico Semanal <noticias@boletin-ejemplo.test>\nTo: abogado@ejemplo.test\nSubject: 🎉 Descuento del 40% en nuestro diplomado virtual\nDate: {HOY}\n\nAproveche esta semana el 40% de descuento en el diplomado en contratación estatal. Cupos limitados. Inscríbase hoy en nuestro sitio web.\n\nSi no desea recibir más mensajes, haga clic aquí para cancelar la suscripción.'}];
+LM.bandejaEJ=EJ;
 const ej=i=>EJ[i].t.replace('{HOY}',new Date().toUTCString()).replace('{AYER}',LM.fmt(LM.iso(LM.addDays(LM.today(),-1))));
 /* ---- Lectura de .eml (cabeceras, multipart, quoted-printable, base64) ---- */
 const dec=(b,cs)=>{ try{ return new TextDecoder(/8859|latin|1252/i.test(cs||'')?'windows-1252':'utf-8').decode(b); }catch(e){ return String.fromCharCode.apply(null,b); } };
@@ -1756,14 +1757,91 @@ LM.correoCard=async function(host,rerender){ if(!host) return; const aviso=LM._c
 
 </script>
 <script>
+/* SIUGJ (Sistema Integrado Único de Gestión Judicial, especialidad laboral).
+   La consulta oficial exige reCAPTCHA y no permite llamadas de otros sitios (sin CORS): LexMonitor NO la automatiza.
+   Aquí: copiar el CUP y abrir la consulta oficial, intentar por la CPNU, y pegar texto o PDF de actuaciones para pasarlas a la línea de tiempo. */
+(function(){
+const LM=window.LM, V=LM.views, E=LM.esc;
+LM.SIUGJ={consulta:'https://siugj.ramajudicial.gov.co/principalPortal/consultarProceso.php',ventanilla:'https://siugj.ramajudicial.gov.co/principalPortal/ventanilla.php',portal:'https://siugj.ramajudicial.gov.co/principalPortal/index.php'};
+const dig=s=>String(s||'').replace(/\D/g,'');
+LM.copiar=async function(t){ try{ await navigator.clipboard.writeText(t); return true; }catch(e){ const a=document.createElement('textarea'); a.value=t; a.style.position='fixed'; a.style.opacity='0'; document.body.appendChild(a); a.select(); let ok=false; try{ ok=document.execCommand('copy'); }catch(_){} a.remove(); return ok; } };
+LM.siugjAbrir=async function(cup,url){ const ok=cup?await LM.copiar(dig(cup)):false; window.open(url||LM.SIUGJ.consulta,'_blank','noopener'); LM.toast(cup?(ok?'📋 CUP copiado: péguelo en SIUGJ y resuelva el captcha':'Abra SIUGJ y escriba el CUP '+dig(cup)):'Se abrió SIUGJ en otra pestaña'); };
+const tipoDe=t=>{ t=String(t||'').toLowerCase(); return /audiencia/.test(t)?'audiencia':/notifica|estado|traslado|edicto/.test(t)?'notificacion':/auto|sentencia|providencia|admite|inadmite|rechaza|fallo/.test(t)?'providencia':/memorial|escrito|recurso|contesta/.test(t)?'memorial':'otro'; };
+const fecha=s=>{ s=String(s||'').trim(); let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if(m) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0'); m=s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/); return m?m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'):''; };
+/* Extracción sin IA: cada línea que empiece (o contenga) una fecha es una actuación */
+LM.siugjParse=function(txt){ const out=[]; String(txt||'').replace(/\r/g,'').split('\n').forEach(l=>{ l=l.replace(/\s+/g,' ').trim(); if(!l) return;
+  const m=l.match(/(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4})/); if(!m||m.index>25) return; const f=fecha(m[1]); if(!f) return;
+  let rest=(l.slice(0,m.index)+' '+l.slice(m.index+m[1].length)).replace(/^[\s|;:\-–·]+/,'').trim(); const fins=rest.match(/(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2}\/\d{4})/g)||[]; fins.forEach(x=>rest=rest.replace(x,''));
+  const parts=rest.split(/\s*[|\t;]\s*|\s+[–-]\s+/).map(x=>x.trim()).filter(Boolean); if(!parts.length) return;
+  out.push({fecha:f,titulo:parts[0].slice(0,140),detalle:parts.slice(1).join(' · ').slice(0,600),fin:fins.length>1?fecha(fins[fins.length-1]):''}); });
+  return out; };
+LM.siugjPrompt=txt=>'Eres asistente de un abogado laboralista en Colombia. Del siguiente texto copiado del expediente del SIUGJ (Rama Judicial, especialidad laboral) extrae TODAS las actuaciones procesales. Responde SOLO un JSON: {"cup":"23 dígitos o vacío","despacho":"o vacío","actuaciones":[{"fecha":"AAAA-MM-DD","titulo":"nombre corto de la actuación","detalle":"anotación o resumen breve","fin":"AAAA-MM-DD si se indica fin de término, o vacío"}]}. No inventes fechas ni actuaciones. Texto:\n\n'+String(txt).slice(0,30000);
+LM.siugjExtraer=async function(txt,signal){ if(LM.iaReady()){ try{ const t=await LM.gemRun(LM.siugjPrompt(txt),signal,()=>{}); const j=JSON.parse(t.slice(t.indexOf('{'),t.lastIndexOf('}')+1)); const A=(j.actuaciones||[]).map(a=>({fecha:fecha(a.fecha),titulo:String(a.titulo||'Actuación').slice(0,140),detalle:String(a.detalle||'').slice(0,600),fin:fecha(a.fin)})).filter(a=>a.fecha);
+      if(A.length) return {via:'ia',cup:dig(j.cup),despacho:j.despacho||'',actuaciones:A}; }catch(e){ console.warn('IA SIUGJ',e); } }
+  const cup=(LM.findRads?LM.findRads(txt)[0]:'')||''; return {via:'texto',cup:dig(cup),despacho:'',actuaciones:LM.siugjParse(txt)}; };
+/* Agrega a la línea de tiempo (sin duplicar fecha+título) y crea alertas y vencimientos */
+LM.siugjAgregar=function(p,acts){ p.actuaciones=p.actuaciones||[]; p.eventos=p.eventos||[]; const have=new Set(p.actuaciones.map(a=>a.fecha+'|'+String(a.titulo).toLowerCase())); const nuevas=[];
+  acts.forEach(a=>{ const k=a.fecha+'|'+a.titulo.toLowerCase(); if(have.has(k)) return; have.add(k); const x={id:LM.uid(),fecha:a.fecha,tipo:tipoDe(a.titulo),titulo:a.titulo,detalle:a.detalle||'',fuente:'SIUGJ'}; if(a.fin) x.fin=a.fin; p.actuaciones.push(x); nuevas.push(x);
+    if(a.fin&&a.fin>=LM.iso(LM.today())) p.eventos.push({id:LM.uid(),fecha:a.fin,tipo:'vencimiento',titulo:'Vence término: '+a.titulo,preparada:false}); });
+  p.actuaciones.sort((a,b)=>a.fecha<b.fecha?-1:1); p.siugj=Object.assign(p.siugj||{},{consultado:new Date().toISOString(),total:p.actuaciones.filter(a=>a.fuente==='SIUGJ').length});
+  const now=new Date(), hh=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  nuevas.slice(-10).forEach(a=>LM.state.alertas.push({id:LM.uid(),fecha:LM.iso(LM.today())+'T'+hh,procesoId:p.id,titulo:'SIUGJ · actuación: '+a.titulo,texto:LM.fmt(a.fecha)+' · '+(a.detalle||'').slice(0,300),leida:false,nivel:/admite|sentencia|audiencia|traslado|inadmite|rechaza/i.test(a.titulo)?'alta':'media',fuente:'SIUGJ'}));
+  LM.save(); return nuevas; };
+LM.siugjNuevoProceso=function(cup,despacho,extra){ const S=LM.state; cup=dig(cup); let p=S.procesos.find(x=>dig(x.radicado)===cup); if(p){ if(despacho&&!p.despacho) p.despacho=despacho; return {p,nuevo:false}; }
+  p=Object.assign({id:'p'+LM.uid(),radicado:cup,medio:'Ordinario laboral',despacho:despacho||'',ponente:'—',clienteId:'',demandante:'',demandado:'',estado:'Activo',etapa:'Radicado en SIUGJ',cuantia:0,fechaHecho:'',resumen:'',actuaciones:[],eventos:[],documentos:[],notas:'',apoderado:S.config.abogado||'',jurisprudencia:[],publicar:false,resumenCliente:'',plataforma:'SIUGJ'},extra||{});
+  S.procesos.push(p); LM.save(); return {p,nuevo:true}; };
+
+V.siugj=function(el,args){ const S=LM.state; const pre=dig(args&&args[0]); const laborales=S.procesos.filter(p=>p.plataforma==='SIUGJ'||/laboral/i.test((p.medio||'')+' '+(p.despacho||'')));
+  const opts=sel=>'<option value="">— Nuevo proceso con el CUP indicado —</option>'+S.procesos.slice().sort((a,b)=>(b.plataforma==='SIUGJ')-(a.plataforma==='SIUGJ')).map(p=>'<option value="'+p.id+'"'+(p.id===sel?' selected':'')+'>'+E(LM.fmtRad(p.radicado))+' · '+E((p.demandante||p.medio||'').slice(0,40))+'</option>').join('');
+  el.innerHTML='<p class="small muted">SIUGJ es el sistema de la Rama Judicial para la especialidad <b>laboral</b> (radicación, reparto, memoriales y expediente). Su consulta pública exige captcha y no admite conexiones de otras aplicaciones, por eso LexMonitor le ayuda a abrirla y a registrar lo que encuentre; no consulta por su cuenta.</p>'+
+   '<div class="card"><h2>1 · Consulta oficial</h2><label for="sg-cup">CUP (código único del proceso, 23 dígitos)</label><div class="row"><input id="sg-cup" inputmode="numeric" placeholder="11001310501520240030900" value="'+E(pre)+'" style="flex:1;min-width:220px" list="sg-list"><datalist id="sg-list">'+laborales.map(p=>'<option value="'+E(dig(p.radicado))+'">').join('')+'</datalist></div>'+
+   '<div class="row" style="margin-top:.6rem;flex-wrap:wrap"><button class="btn primary" id="sg-open">📋 Copiar CUP y abrir consulta SIUGJ</button><button class="btn" id="sg-cpnu">🏛 Intentar por la CPNU</button><a class="btn" href="'+LM.SIUGJ.portal+'" target="_blank" rel="noopener">Portal SIUGJ ↗</a></div><div id="sg-cpnu-res" class="small" style="margin-top:.5rem"></div>'+
+   '<p class="small muted" style="margin-top:.5rem">En SIUGJ pegue el CUP, marque «No soy un robot» y consulte. Para ver el expediente completo debe iniciar sesión como parte o apoderado.</p></div>'+
+   '<div class="card"><h2>2 · Pegar actuaciones del expediente</h2><p class="small muted">Copie la tabla de actuaciones desde SIUGJ (o descargue el PDF) y péguela aquí. La IA identifica fecha, actuación y anotación; sin IA se reconoce cada línea que empiece con una fecha.</p>'+
+   '<label for="sg-p">Proceso</label><select id="sg-p">'+opts((S.procesos.find(p=>pre&&dig(p.radicado)===pre)||{}).id)+'</select>'+
+   '<label for="sg-tx">Texto de las actuaciones</label><textarea id="sg-tx" rows="8" placeholder="15/10/2026 | Auto admite demanda | Se admite y se ordena notificar&#10;20/10/2026 | Notificación personal | Enviada al canal digital del demandado"></textarea>'+
+   '<div class="row" style="flex-wrap:wrap"><label class="btn sm" style="cursor:pointer">📎 Cargar PDF o .txt<input type="file" id="sg-file" accept=".pdf,.txt,text/plain,application/pdf" hidden></label><span class="small muted" id="sg-fs"></span><span class="sp"></span><button class="btn primary" id="sg-go">✨ Procesar actuaciones</button></div><div id="sg-res"></div></div>';
+  const $=s=>el.querySelector(s), cupv=()=>dig($('#sg-cup').value);
+  $('#sg-cup').oninput=()=>{ const p=S.procesos.find(x=>dig(x.radicado)===cupv()); if(p) $('#sg-p').value=p.id; };
+  $('#sg-open').onclick=()=>{ const c=cupv(); if(c&&c.length!==23) LM.toast('Revise el CUP: debe tener 23 dígitos'); LM.siugjAbrir(c); };
+  $('#sg-cpnu').onclick=async()=>{ const c=cupv(), out=$('#sg-cpnu-res'); if(c.length!==23){ LM.toast('Escriba el CUP de 23 dígitos'); return; } out.innerHTML='Consultando la CPNU…';
+    try{ const L=await LM.ramaBuscarRad(c); if(!L.length){ out.innerHTML='ℹ El proceso no aparece en la CPNU. Es normal en procesos que solo se tramitan en SIUGJ: use la consulta oficial y pegue las actuaciones abajo.'; return; }
+      out.innerHTML='✅ También está en la CPNU: '+E(L[0].despacho||'')+'. <button class="btn sm primary" id="sg-imp">Importar o actualizar desde la CPNU</button>';
+      out.querySelector('#sg-imp').onclick=async()=>{ out.innerHTML='Importando…'; try{ const f=await LM.ramaFicha(L[0].idProceso); const r=LM.ramaImport(f,c); r.p.plataforma=r.p.plataforma||'SIUGJ'; LM.save(); LM.toast('✅ '+r.nuevas.length+' actuaciones desde la CPNU'); location.hash='#/proceso/'+r.p.id; }catch(e){ out.textContent='No se pudo importar: '+e.message; } }; }
+    catch(e){ out.innerHTML='⚠ No fue posible consultar la CPNU ('+E(e.message)+'). Use la consulta oficial de SIUGJ.'; } };
+  $('#sg-file').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; $('#sg-fs').textContent='Leyendo '+f.name+'…'; try{ const t=await LM.readDoc(f); $('#sg-tx').value=t; $('#sg-fs').textContent='✓ '+f.name; }catch(err){ $('#sg-fs').textContent='⚠ '+err.message; } };
+  $('#sg-go').onclick=async()=>{ const tx=$('#sg-tx').value.trim(), res=$('#sg-res'); if(!tx){ LM.toast('Pegue el texto de las actuaciones'); return; } res.innerHTML='<p class="small">'+(LM.iaReady()?'La IA está leyendo las actuaciones…':'Reconociendo actuaciones…')+'</p>';
+    const r=await LM.siugjExtraer(tx); if(!r.actuaciones.length){ res.innerHTML='<p class="small err">No se reconoció ninguna actuación. Verifique que cada línea tenga la fecha.</p>'; return; }
+    if(r.cup&&!cupv()) $('#sg-cup').value=r.cup;
+    res.innerHTML='<h3>'+r.actuaciones.length+' actuaciones reconocidas <span class="chip '+(r.via==='ia'?'ok':'')+'">'+(r.via==='ia'?'con IA':'sin IA')+'</span></h3><table><tr><th></th><th>Fecha</th><th>Actuación</th><th>Detalle</th></tr>'+r.actuaciones.map((a,i)=>'<tr><td><input type="checkbox" data-i="'+i+'" checked aria-label="Incluir"></td><td>'+LM.fmt(a.fecha)+'</td><td>'+E(a.titulo)+'</td><td class="small">'+E(a.detalle)+(a.fin?' · <b>vence '+LM.fmt(a.fin)+'</b>':'')+'</td></tr>').join('')+'</table><div class="row" style="justify-content:flex-end;margin-top:.6rem"><button class="btn primary" id="sg-add">➕ Agregar a la línea de tiempo</button></div>';
+    res.querySelector('#sg-add').onclick=()=>{ const sel=[...res.querySelectorAll('[data-i]')].filter(c=>c.checked).map(c=>r.actuaciones[+c.dataset.i]); let p=LM.proc($('#sg-p').value);
+      if(!p){ const c=cupv()||r.cup; if(c.length!==23){ LM.toast('Elija un proceso o escriba el CUP de 23 dígitos'); return; } p=LM.siugjNuevoProceso(c,r.despacho).p; }
+      const n=LM.siugjAgregar(p,sel); LM.toast('✅ '+n.length+' actuaciones agregadas'+(sel.length-n.length?' ('+(sel.length-n.length)+' ya estaban)':'')); location.hash='#/proceso/'+p.id; }; };
+};
+
+/* ---- Bandeja: regla para notificaciones del SIUGJ ---- */
+LM.esSiugj=m=>/siugj|sistema integrado (único )?de gesti[oó]n judicial/i.test([m.de,m.asunto,m.cuerpo].join(' '));
+if(LM.bandejaPrompt){ const bp=LM.bandejaPrompt; LM.bandejaPrompt=m=>bp(m)+(LM.esSiugj(m)?'\n\nNOTA: este correo proviene del SIUGJ (sistema de la Rama Judicial para la especialidad laboral): clasifícalo como "notificacion" salvo que sea claramente publicitario; el CUP de 23 dígitos es el radicado.':''); }
+if(LM.bandejaAnalizar){ const ba=LM.bandejaAnalizar; LM.bandejaAnalizar=async function(m,signal){ const r=await ba(m,signal); if(LM.esSiugj(m)&&r){ if(r.categoria!=='sin_importancia'){ r.categoria='notificacion'; if(r.prioridad!=='alta') r.prioridad='alta'; }
+  r.fuente='SIUGJ'; if(!/SIUGJ/.test(r.resumen||'')) r.resumen='[SIUGJ] '+(r.resumen||''); if(!r.radicado){ const c=(LM.findRads(m.asunto+' '+m.cuerpo)||[])[0]; if(c) r.radicado=c; }
+  r.accion=(r.accion?r.accion+' ':'')+'Revise la actuación en SIUGJ (Consulta judicial → SIUGJ).'; } return r; }; }
+if(LM.bandejaEJ) LM.bandejaEJ.push({n:'Notificación SIUGJ (laboral)',t:'From: SIUGJ Notificaciones <notificaciones.siugj@cendoj.ramajudicial.gov.co>\nTo: abogado@ejemplo.test\nSubject: SIUGJ - Notificación de actuación CUP 11001310501520260012300\nDate: {HOY}\n\nSistema Integrado Único de Gestión Judicial - SIUGJ\n\nSe le informa que en el proceso ordinario laboral con CUP 11001310501520260012300, Juzgado 15 Laboral del Circuito de Bogotá, demandante Rosa Elvira Cárdenas (ficticia), se registró la actuación AUTO INADMITE DEMANDA de fecha {AYER}. Se concede el término de cinco (5) días para subsanar, so pena de rechazo.\n\nIngrese al SIUGJ para consultar el documento.'});
+})();
+
+</script>
+<script>
+/* Radicación asistida (etapa 2) */
+
+</script>
+<script>
 /* Consulta judicial: una sola sección con dos pestañas, SAMAI (#/alertas, alias #/samai) y Rama Judicial (#/rama). */
 (function(){
 const LM=window.LM, V=LM.views; const K='lm_consulta_tab';
-const tabs=on=>'<div class="cj-head"><h1 style="margin-bottom:.3rem">⚖ Consulta judicial</h1><nav class="cj-tabs" role="tablist" aria-label="Fuente de consulta"><a href="#/alertas" role="tab" aria-selected="'+(on==='samai')+'" class="'+(on==='samai'?'on':'')+'">🔔 SAMAI <span class="small muted">Consejo de Estado y tribunales</span></a><a href="#/rama" role="tab" aria-selected="'+(on==='rama')+'" class="'+(on==='rama'?'on':'')+'">🏛 Rama Judicial <span class="small muted">CPNU · juzgados y tribunales</span></a></nav></div>';
+const tabs=on=>'<div class="cj-head"><h1 style="margin-bottom:.3rem">⚖ Consulta judicial</h1><nav class="cj-tabs" role="tablist" aria-label="Fuente de consulta"><a href="#/alertas" role="tab" aria-selected="'+(on==='samai')+'" class="'+(on==='samai'?'on':'')+'">🔔 SAMAI <span class="small muted">Consejo de Estado y tribunales</span></a><a href="#/rama" role="tab" aria-selected="'+(on==='rama')+'" class="'+(on==='rama'?'on':'')+'">🏛 Rama Judicial <span class="small muted">CPNU · juzgados y tribunales</span></a><a href="#/siugj" role="tab" aria-selected="'+(on==='siugj')+'" class="'+(on==='siugj'?'on':'')+'">⚖ SIUGJ <span class="small muted">Laboral</span></a></nav></div>';
 function wrap(name,tab){ const orig=V[name]; V[name]=function(el,args){ if(el.classList&&el.classList.contains('cj-body')) return orig(el,args); try{ localStorage.setItem(K,tab); }catch(e){}
   el.innerHTML=tabs(tab)+'<div class="cj-body"></div>'; return orig(el.querySelector('.cj-body'),args); }; }
-wrap('alertas','samai'); wrap('rama','rama'); V.samai=V.alertas;
-V.consulta=function(el,args){ let t='samai'; try{ t=localStorage.getItem(K)||'samai'; }catch(e){} location.replace('#/'+(t==='rama'?'rama':'alertas')); };
+wrap('alertas','samai'); wrap('rama','rama'); wrap('siugj','siugj'); V.samai=V.alertas;
+V.consulta=function(el,args){ let t='samai'; try{ t=localStorage.getItem(K)||'samai'; }catch(e){} location.replace('#/'+(t==='rama'?'rama':t==='siugj'?'siugj':'alertas')); };
 })();
 
 </script>
