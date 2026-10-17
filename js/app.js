@@ -4,7 +4,7 @@ const LM=window.LM, $=s=>document.querySelector(s);
 LM.$=$; LM.views={};
 LM.NAV=[
  {id:'tablero',ic:'▦',t:'Tablero',main:true},{id:'procesos',ic:'📁',t:'Procesos',main:true},{id:'alertas',ic:'🔔',t:'SAMAI',bt:'Consulta',main:true},
- {id:'agenda',ic:'📅',t:'Agenda',main:true},{id:'bandeja',ic:'📥',t:'Bandeja inteligente'},{id:'terminos',ic:'⏱',t:'Términos'},{id:'rama',ic:'🏛',t:'Rama Judicial'},{id:'siugj',ic:'⚖',t:'SIUGJ laboral'},{id:'radicacion',ic:'📤',t:'Radicación laboral'},{id:'asistente',ic:'🧭',t:'Asistente'},
+ {id:'agenda',ic:'📅',t:'Agenda',main:true},{id:'bandeja',ic:'📥',t:'Bandeja inteligente'},{id:'terminos',ic:'⏱',t:'Términos'},{id:'rama',ic:'🏛',t:'Rama Judicial'},{id:'siugj',ic:'⚖',t:'SIUGJ laboral'},{id:'radicacion',ic:'📤',t:'Radicación laboral'},{id:'antecedentes',ic:'🔎',t:'Consultas y antecedentes'},{id:'asistente',ic:'🧭',t:'Asistente'},
  {id:'solicitudes',ic:'📨',t:'Solicitudes del portal'},{id:'clientes',ic:'👥',t:'Clientes'},{id:'borradores',ic:'📝',t:'Borradores'},{id:'reportes',ic:'📊',t:'Reportes'},
  {id:'notificaciones',ic:'💬',t:'Canales'},{id:'config',ic:'⚙',t:'Configuración'}
 ];
@@ -27,7 +27,7 @@ LM.migrate=function(st){ if((st.version||1)>=2) return st; const PUB=(window.Lex
   const demo=LM.demoData(); st.procesos.forEach(p=>{ if(p.id==='p1'&&!p.jurisprudencia.length){ const dp=demo.procesos.find(x=>x.id==='p1'); p.jurisprudencia=dp.jurisprudencia; } });
   st.version=2; return st; };
 /* Menú agrupado: el grupo se asigna por id al dibujar (incluye entradas que agregan otros módulos) */
-LM.NAV_GRUPOS=[['General',['tablero','procesos','agenda','terminos']],['Consulta judicial',['alertas','rama','siugj','radicacion']],['Correo y clientes',['bandeja','solicitudes','clientes','notificaciones']],['IA y documentos',['asistente','revision','borradores','reportes']],['Ajustes',['config']]];
+LM.NAV_GRUPOS=[['General',['tablero','procesos','agenda','terminos']],['Consulta judicial',['alertas','rama','siugj','radicacion','antecedentes']],['Correo y clientes',['bandeja','solicitudes','clientes','notificaciones']],['IA y documentos',['asistente','revision','borradores','reportes']],['Ajustes',['config']]];
 LM.CONSULTA=['alertas','rama','siugj','samai','consulta'];
 function buildNav(){
   const link=(n,cls,short)=>'<a href="#/'+n.id+'" data-nav="'+n.id+'" class="'+(cls||'')+'"><span class="ic" aria-hidden="true">'+n.ic+'</span><span>'+(short&&n.bt||n.t)+'</span></a>';
