@@ -1844,7 +1844,7 @@ const lib={}; LM.vendor=function(k){ const g=k==='pdf'?()=>window.PDFLib:()=>win
 const MB=1024*1024, MAXF=12, AVISO=20*MB;
 /* ---- Marco normativo (verificado el 16-oct-2026) ---- */
 LM.RAD_NORMA={ley:'Ley 2452 de 2025 (nuevo Código Procesal del Trabajo y de la Seguridad Social)',pub:'Diario Oficial 53077 del 2 de abril de 2025',vig:'Vigente un año después de su publicación (art. 330): rige para las demandas presentadas desde abril de 2026. Los procesos iniciados antes siguen con las normas anteriores.',
-  antes:'Los artículos 25, 25A, 26 y 6 del CPTSS anterior (Decreto Ley 2158 de 1948) fueron derogados por el art. 331; hoy los requisitos están en los arts. 61 (demanda), 63 (anexos), 66 (inadmisión) y 11 (reclamación de derechos).',
+  antes:'Los artículos 25, 26 y 6 del CPTSS anterior (Decreto Ley 2158 de 1948) fueron derogados por el art. 331; hoy los requisitos están en los arts. 61 (demanda), 63 (anexos), 66 (inadmisión) y 11 (reclamación de derechos).',
   fuente:'https://archivodigitalapi.cortesuprema.gov.co/share/2026/3/Publicaciones/LEY-2452-2025.pdf'};
 const ROLES=[['demanda','Demanda','DemandaLaboral'],['poder','Poder','Poder'],['identidad','Documento de identidad del demandante','DocumentoIdentidad'],['existencia','Existencia y representación legal','ExistenciaRepresentacion'],['reclamacion','Reclamación de derechos (entidad pública)','ReclamacionDerechos'],['pruebas','Pruebas documentales','Pruebas'],['otros','Otros anexos','Anexos']];
 LM.radNombre=function(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ñ/gi,'n').replace(/\.pdf$/i,'').replace(/[^A-Za-z0-9]+/g,' ').trim().split(' ').filter(Boolean).map(w=>w[0].toUpperCase()+w.slice(1)).join('').slice(0,60)||'Documento'; };
@@ -1875,7 +1875,7 @@ LM.radChecklist=function(d,anexos){ anexos=anexos||[]; const has=r=>anexos.some(
    ['a-prue','Pruebas documentales y extraprocesales en poder del demandante, enunciadas y enumeradas','art. 63 num. 4 · art. 61 inc. final',has('pruebas')||lines(d.pruebas).length===0],
    ['reclam','Entidad pública demandada: reclamación de derechos agotada (no es requisito de procedibilidad)','art. 11',!d.ddoPub||d.reclamacion||has('reclamacion')],
    ['siugj','Usuario externo SIUGJ activo e inscripción vigente en el SIRNA','Acuerdo PCSJA23-12094 · Manual SIUGJ',!!d.checks.siugj,true],
-   ['firma','Demanda revisada y firmada (firma digital, escaneada o nombre y T.P. al pie)','art. 78 · Ley 2213/2022 art. 2',!!d.checks.firma,true]];
+   ['firma','Demanda revisada y firmada por el apoderado (nombre, cédula y T.P. al pie)','buena práctica · verifique con la norma vigente',!!d.checks.firma,true]];
   const ex=[]; if(anexos.length>MAXF) ex.push('Hay '+anexos.length+' archivos: SIUGJ admite máximo '+MAXF+'. Únalos por tipo.'); anexos.filter(a=>a.err).forEach(a=>ex.push(a.nombre+': '+a.err));
   return {items:I.map(x=>({id:x[0],t:x[1],ref:x[2],ok:!!x[3],manual:!!x[4]})),extra:ex}; };
 LM.radCompleta=(d,an)=>{ const c=LM.radChecklist(d,an); return c.items.every(i=>i.ok)&&!c.extra.length; };
