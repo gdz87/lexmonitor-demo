@@ -2,7 +2,7 @@
 (function(){
 const LM=window.LM, V=LM.views, E=LM.esc;
 const JSZIP='https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', MARK='{{CONTENIDO}}';
-let jzp=null; function jszip(){ if(window.JSZip) return Promise.resolve(window.JSZip); return jzp=jzp||new Promise((ok,ko)=>{ const s=document.createElement('script'); s.src=JSZIP; s.onload=()=>ok(window.JSZip); s.onerror=()=>{ jzp=null; ko(new Error('No se pudo descargar el componente de Word (¿sin conexión?)')); }; document.head.appendChild(s); }); }
+let jzp=null; function jszip(){ if(window.JSZip) return Promise.resolve(window.JSZip); if(LM.vendor) return LM.vendor('zip'); return jzp=jzp||new Promise((ok,ko)=>{ const s=document.createElement('script'); s.src=JSZIP; s.onload=()=>ok(window.JSZip); s.onerror=()=>{ jzp=null; ko(new Error('No se pudo descargar el componente de Word (¿sin conexión?)')); }; document.head.appendChild(s); }); }
 /* ---------- IndexedDB ---------- */
 let dbp=null; function db(){ return dbp=dbp||new Promise((res,rej)=>{ if(!window.indexedDB) return rej(new Error('Este navegador no permite guardar plantillas (IndexedDB)')); const q=indexedDB.open('lexmonitor-membretes',1); q.onupgradeneeded=()=>q.result.createObjectStore('tpl',{keyPath:'id'}); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
 const tx=async(mode,fn)=>{ const d=await db(); return new Promise((res,rej)=>{ const t=d.transaction('tpl',mode); const st=t.objectStore('tpl'); let out; const r=fn(st); if(r) r.onsuccess=()=>out=r.result; t.oncomplete=()=>res(out); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error||new Error('Operación cancelada (¿sin espacio?)')); }); };
