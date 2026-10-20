@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<title>LexMonitor se mudó</title>
+<meta name="robots" content="noindex">
+<meta http-equiv="refresh" content="3;url=https://gdz87.github.io/lexmonitor/">
+<script>
+(function(){
+  var B='https://gdz87.github.io/lexmonitor/';
+  var p=location.pathname.replace(/^\/lexmonitor-demo/i,'').replace(/^\/+/,'');
+  var s=location.search||'', h=location.hash||'';
+  var hasCode=/[?&]codigo=/i.test(s)||/codigo=/i.test(h);
+  var t;
+  var top={'sitio':1,'videos.html':1,'admin.html':1,'licencias.html':1,'manual_usuario_lexmonitor.pdf':1,'lexmonitor_demo.html':1,'leeme.txt':1,'videos':1};
+  var first=p.split('/')[0].toLowerCase();
+  if(p===''||p==='index.html'){ t=(hasCode||/^#\//.test(h))?'app/':''; }
+  else if(/^app(\/|$)/i.test(p)){ t=p.replace(/^app\/?/i,'app/').replace(/^app\/index\.html$/i,'app/'); }
+  else if(top[first]){ t=p.replace(/^manual_usuario_lexmonitor\.pdf$/i,'Manual_Usuario_LexMonitor.pdf').replace(/^lexmonitor_demo\.html$/i,'LexMonitor_demo.html'); }
+  else if(/^(js|css|icons)\//i.test(p)||/^(sw\.js|manifest\.webmanifest)$/i.test(p)){ t='app/'+p; }
+  else { t=hasCode?'app/':''; }
+  var u=B+t+s+h;
+  try{ document.addEventListener('DOMContentLoaded',function(){var a=document.getElementById('lnk');a.href=u;a.textContent=u;}); }catch(e){}
+  location.replace(u);
+})();
+</script>
+</head><body style="font-family:system-ui,sans-serif;max-width:40rem;margin:3rem auto;padding:1rem">
+<h1>LexMonitor tiene nueva dirección</h1>
+<p>Redirigiendo… Si no ocurre automáticamente, abra:<br>
+<a id="lnk" href="https://gdz87.github.io/lexmonitor/">https://gdz87.github.io/lexmonitor/</a></p>
+</body></html>
